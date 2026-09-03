@@ -1,9 +1,26 @@
 CC_HOST  ?= gcc
 CC_PI    ?= pi32v2-gcc
+# JieLi toolchain bin dir (ld/nm live next to cc). Override to match mount:
+#   make fw CC_PI=/opt/jieli/pi32v2/bin/cc JIELI_BIN=/opt/jieli/pi32v2/bin
+JIELI_BIN ?= /opt/jieli/pi32v2/bin
+LD_PI     ?= $(JIELI_BIN)/ld
+NM_PI     ?= $(JIELI_BIN)/nm
 CFLAGS   := -std=c99 -Wall -Wextra -Werror -Os -ffunction-sections -fdata-sections
 SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_midi.c
 
-.PHONY: all host target check-no-malloc sram clean
+# Platform ABI: the ONLY undefined symbols our firmware may reference.
+# Everything else (SDK boot, Timer/I2S registration, GPIOA MMIO) is either
+# static-inline in bsp_config.h or provided by the JieLi link step.
+# FM_*  = Dexed C++ engine port (extern "C" wrappers, linked later).
+# Uart0_SendByte = probe-flash UART TX byte sink (probe image only).
+# memset/memcpy = JieLi libc (always present at the SDK link). Allowed
+#   deliberately: clang lowers small constant-fill init loops to them
+#   (e.g. 6-byte voice tables). They are bounded, heap-free, lock-free,
+#   and ISR-safe. Anything ELSE undefined (float helpers, malloc, …) fails.
+ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|memset|memcpy)$$
+ABI_PROBE  := ^(Uart0_SendByte)$$
+
+.PHONY: all host target fw check-no-malloc sram clean
 
 all: host
 
@@ -42,6 +59,25 @@ target:
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
+
+# Firmware partial-link: merges our objects into relocatable firmware images
+# and gates on the ABI allowlist — any unexpected undefined symbol (missing
+# helper, accidental libc call like memcpy, soft-float libcall) fails here,
+# long before the JieLi SDK link. Requires the toolchain (runs in Docker).
+FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o
+FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o
+
+fw: target
+	$(LD_PI) -r $(FW_NORMAL_OBJS) -o build/fm1-polyseq.o
+	$(LD_PI) -r $(FW_PROBE_OBJS) -o build/fm1-probe.o
+	$(NM_PI) -u build/fm1-polyseq.o | awk '{print $$2}' | sort -u > build/undef-normal.txt
+	$(NM_PI) -u build/fm1-probe.o | awk '{print $$2}' | sort -u > build/undef-probe.txt
+	@echo "== undefined in fm1-polyseq.o =="; cat build/undef-normal.txt
+	@echo "== undefined in fm1-probe.o =="; cat build/undef-probe.txt
+	! grep -vE '$(ABI_NORMAL)' build/undef-normal.txt | grep -q .
+	! grep -vE '$(ABI_PROBE)' build/undef-probe.txt | grep -q .
+	@echo "ABI GATE OK"
+	size build/fm1-polyseq.o build/fm1-probe.o
 
 sram:
 	nm --print-size --size-sort build/*.o 2>/dev/null | tail -20 || true

@@ -43,16 +43,19 @@ static uint8_t live_next = 0u;           /* round-robin cursor */
 static uint32_t audio_now_us = 0u;
 static uint32_t audio_carry = 0u; /* leftover 1e6ths... in units of (num*1e6 % rate) */
 
-/* Simple mono->stereo: unity. Soft-clip to [-1,1] via fast saturate. */
+/* Branchless-ish saturate to [-1,1] via IEEE-754 bit inspection.
+ * A plain `x > 1.0f` comparison emits __gtsf2/__ltsf2 soft-float libcalls
+ * on pi32v2; this integer-only form keeps the DMA callback libcall-free.
+ * |x| <= 1.0 (bits, sign-cleared, <= 0x3F800000) passes through;
+ * anything larger (incl. Inf/NaN) saturates by sign bit. */
 static float fast_clip(float x)
 {
-    if (x > 1.0f) {
-        return 1.0f;
+    union { float f; uint32_t u; } v;
+    v.f = x;
+    if ((v.u & 0x7FFFFFFFu) <= 0x3F800000u) {
+        return x;
     }
-    if (x < -1.0f) {
-        return -1.0f;
-    }
-    return x;
+    return (v.u & 0x80000000u) ? -1.0f : 1.0f;
 }
 
 void Audio_Init(void)

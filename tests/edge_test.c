@@ -44,7 +44,8 @@ void FM_NoteOff(uint8_t v)
 }
 void FM_Render(float *l, float *r, uint16_t n)
 {
-    for (uint16_t i = 0; i < n; i++) { l[i] = 0.0f; r[i] = 0.0f; }
+    /* Hot signal: also proves the integer-bit fast_clip saturates. */
+    for (uint16_t i = 0; i < n; i++) { l[i] = 3.0f; r[i] = -3.0f; }
     render_cnt++;
 }
 
@@ -170,6 +171,7 @@ int main(void)
     assert(seen_live_voice[0] == 1); /* slot 0 was stolen by 7th note */
     Audio_Process_Callback(buf, BLOCK_FRAMES);
     assert(render_cnt == 1);
+    assert(buf[0] == 1.0f && buf[1] == -1.0f); /* saturated, no soft-float */
     printf("Voice-split OK\n");
 
     printf("ALL EDGE TESTS PASSED\n");

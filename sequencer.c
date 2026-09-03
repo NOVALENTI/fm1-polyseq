@@ -176,11 +176,21 @@ void Sequencer_SetStep(uint8_t step, const SeqStep_t *src)
 
 void Sequencer_GetStepData(uint8_t step, SeqStep_t *dst)
 {
+    uint8_t v;
+    unsigned s;
     if (step >= SEQ_STEPS || dst == 0) {
         return;
     }
-    unsigned s = IRQ_SAVE();
-    *dst = seq_grid[step];
+    /* Field-wise copy: a struct assignment here emits a memcpy libcall
+     * on pi32v2, which we keep out of the firmware image. */
+    s = IRQ_SAVE();
+    for (v = 0u; v < SEQ_POLY; v++) {
+        dst->notes[v] = seq_grid[step].notes[v];
+        dst->vels[v]  = seq_grid[step].vels[v];
+    }
+    dst->gate_pct = seq_grid[step].gate_pct;
+    dst->swing_us = seq_grid[step].swing_us;
+    dst->active   = seq_grid[step].active;
     IRQ_RESTORE(s);
 }
 
@@ -277,7 +287,12 @@ uint8_t SEQ_FIFO_PopDue(uint32_t now_us, MidiEvent_t *ev)
     if (dt < 0) {
         return 0u;
     }
-    *ev = seq_fifo[seq_tail];
+    /* Field-wise copy (see GetStepData: no memcpy libcalls on pi32v2). */
+    ev->type     = seq_fifo[seq_tail].type;
+    ev->voice_id = seq_fifo[seq_tail].voice_id;
+    ev->note     = seq_fifo[seq_tail].note;
+    ev->vel      = seq_fifo[seq_tail].vel;
+    ev->due_us   = seq_fifo[seq_tail].due_us;
     seq_tail = (uint8_t)((seq_tail + 1u) & FIFO_MASK);
     return 1u;
 }

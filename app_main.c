@@ -32,12 +32,13 @@ static void probe_putc(char c) { Uart0_SendByte(c); }
 #endif
 #endif
 
-static uint32_t g_bpm = 120u;
 #ifndef BRINGUP_PROBE
+static uint32_t g_bpm = 120u;
 static uint8_t prev_keys[NUM_KEYS];
 static uint8_t cur_keys[NUM_KEYS];
 #endif
 
+#ifndef BRINGUP_PROBE
 /* Call this from the 1 kHz hardware timer ISR (Timer 2/3). */
 void Timer2_1kHz_ISR(void)
 {
@@ -50,6 +51,7 @@ void I2S_DMA_IRQ(float *dma_buf, uint16_t frames)
 {
     Audio_Process_Callback(dma_buf, frames);
 }
+#endif
 
 int main(void)
 {
