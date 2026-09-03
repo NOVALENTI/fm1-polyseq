@@ -5,8 +5,13 @@ CC_PI    ?= pi32v2-gcc
 JIELI_BIN ?= /opt/jieli/pi32v2/bin
 LD_PI     ?= $(JIELI_BIN)/ld
 NM_PI     ?= $(JIELI_BIN)/nm
+# Target libc/include tree (newlib math.h etc., same layout as the SDK).
+PI_INC    := -I$(JIELI_BIN)/../include
 CFLAGS   := -std=c99 -Wall -Wextra -Wsign-compare -Werror -Os -ffunction-sections -fdata-sections
 SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_midi.c ota_guard.c
+# FM engine port (Dexed/msfa -> C99). Not linked into firmware until the
+# voice layer lands; target compiles below already gate it for pi32v2.
+FM_SRC   := fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c
 
 # Platform ABI: the ONLY undefined symbols our firmware may reference.
 # Everything else (SDK boot, Timer/I2S registration, GPIOA MMIO) is either
@@ -26,12 +31,13 @@ ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
 	build/ota_test
 	build/ota_dispatch_test
+	build/fm_tables_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -48,6 +54,9 @@ build/ota_test: tests/ota_test.c ota_guard.c | build
 build/ota_dispatch_test: tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c sequencer.c hal_shift_register.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c sequencer.c hal_shift_register.c -o $@
 
+build/fm_tables_test: tests/fm_tables_test.c $(FM_SRC) | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_tables_test.c $(FM_SRC) -o $@ -lm
+
 # Probe-flash app variant (bring-up only): compile-checked, never run on host.
 build/app_probe.o: app_main.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -DBRINGUP_PROBE -I. -c app_main.c -o $@
@@ -59,15 +68,18 @@ build:
 # NOTE: link happens against the Dexed C++ engine port (extern "C" wrappers
 # matching fm_stub.h) — these -c compiles intentionally stop before link.
 target: | build
-	$(CC_PI) $(CFLAGS) -c hal_shift_register.c -o build/hal.o
-	$(CC_PI) $(CFLAGS) -c sequencer.c -o build/seq.o
-	$(CC_PI) $(CFLAGS) -c audio_core.c -o build/audio.o
-	$(CC_PI) $(CFLAGS) -c app_main.c -o build/app.o
-	$(CC_PI) $(CFLAGS) -DBRINGUP_PROBE -c app_main.c -o build/app_probe.o
-	$(CC_PI) $(CFLAGS) -c debug_midi.c -o build/debug.o
-	$(CC_PI) $(CFLAGS) -c bringup_probe.c -o build/probe.o
-	$(CC_PI) $(CFLAGS) -c ota_guard.c -o build/ota.o
-	$(CC_PI) $(CFLAGS) -c ota_dispatch.c -o build/ota_dispatch.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c hal_shift_register.c -o build/hal.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c sequencer.c -o build/seq.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c audio_core.c -o build/audio.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c app_main.c -o build/app.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -DBRINGUP_PROBE -c app_main.c -o build/app_probe.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c debug_midi.c -o build/debug.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c bringup_probe.c -o build/probe.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c ota_guard.c -o build/ota.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c ota_dispatch.c -o build/ota_dispatch.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_sin.c -o build/fm_sin.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_exp2.c -o build/fm_exp2.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_freqlut.c -o build/fm_freqlut.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
