@@ -82,8 +82,12 @@ int main(void)
      * DMA at SAMPLE_RATE/BLOCK_FRAMES here. SDK hooks (all verified in
      * fw-AC79_AIoT_SDK): JL_TIMER2 at 0x10600 (CON/CNT/PRD/PWM) for the
      * 1 kHz tick, or sys_timer_add(priv, func, msec) from system/timer.h
-     * for ms-granularity callbacks. XIP NOR flash rom ORIGIN is 0x2000120
-     * with internal ram0 at 0x1c00000 (cpu/wl82/sdk_ld_sfc.c, NO_SDRAM). */
+     * for ms-granularity callbacks. Audio out: dac_open() +
+     * dac_set_sample_rate(48000) + dac_set_data_handler(buf fill) +
+     * dac_on() (asm/dac.h, sr_points = BLOCK_FRAMES); external CS4344 via
+     * iis_open(&pd, idx) + iis_channel_on() (asm/iis.h). XIP NOR flash rom
+     * ORIGIN is 0x2000120 with internal ram0 at 0x1c00000
+     * (cpu/wl82/sdk_ld_sfc.c, NO_SDRAM). */
 
     for (;;) {
         HAL_SR_GetKeys(cur_keys);

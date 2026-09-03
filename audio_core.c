@@ -1,11 +1,24 @@
 /* audio_core.c
  *
- * Bridge: sequencer FIFO -> Dexed 6-op FM engine -> I2S DMA buffer (CS4344).
+ * Bridge: sequencer FIFO -> Dexed 6-op FM engine -> audio DMA buffer.
  *
- * EXECUTION CONTEXT: Audio_Process_Callback runs in I2S DMA half/full IRQ
- * at 48 kHz / 128 frames (~2.66 ms budget). It must be bounded, heap-free,
- * and never block on the timer ISR. MIDI consumption is a bounded drain
- * (MAX_EVENTS_PER_BLOCK) so a pathological FIFO burst cannot starve render.
+ * SDK HOOKUP (verified in fw-AC79_AIoT_SDK, include_lib/driver/cpu/wl82):
+ *  Internal DAC path (asm/dac.h): dac_open(&pd) -> dac_set_sample_rate()
+ *    -> dac_set_data_handler(priv, handler) -> dac_on(). The handler has
+ *    signature handler(void *priv, u8 *data, int len) and fires every
+ *    sr_points samples ("多少个采样点进一次中断"); Audio_Process_Callback
+ *    below IS that handler body (adapt float stereo to the s16le buffer
+ *    at the glue layer: len_bytes = frames * 2ch * 2B).
+ *  External DAC path, e.g. CS4344 (asm/iis.h): iis_open(&pd, index) with
+ *    port_sel = IIS_PORTA/PORTC/PORTG, channel_out, data_width, mclk_output
+ *    and f32e frame clocks, then iis_channel_on(). Same sr_points pacing.
+ *  Either way BLOCK_FRAMES maps 1:1 to the SDK's sr_points field; keep it
+ *    128 (≈2.66 ms @48 kHz) unless the DAC driver demands otherwise.
+ *
+ * EXECUTION CONTEXT: runs in DMA data-handler context at 48 kHz /
+ * 128 frames. Bounded, heap-free, never blocks on the timer ISR. MIDI
+ * consumption is a bounded drain (MAX_EVENTS_PER_BLOCK) so a pathological
+ * FIFO burst cannot starve render.
  *
  * SAMPLE CLOCK: audio_now_us advances by frames*1e6/SAMPLE_RATE using integer
  * math (128 @48k = 2666 us + fractional carry). due_us from the sequencer
@@ -14,7 +27,8 @@
  * events at the exact frame index instead of block boundaries.
  *
  * NOTE: output is interleaved stereo floats [L R L R ...], length = 2*frames.
- * The CS4344 backend (I2S driver, not here) converts to 16-bit DMA words.
+ * The DAC/IIS glue (not here) converts to the s16le DMA words the SDK
+ * data handler expects (see SDK HOOKUP above).
  *
  * pi32v2 DSP OPTIMIZATION HOOKS (marked TODO(pi32v2) below):
  *  - Region A (event drain): already scalar/integer; keep in C.
