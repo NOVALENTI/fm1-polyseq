@@ -110,5 +110,7 @@ image-dryrun: fw
 sram:
 	nm --print-size --size-sort build/*.o 2>/dev/null | tail -20 || true
 
+# NOTE: build/ also hosts gitignored reference trees (toolchain/, sdk/)
+# that are expensive to re-fetch. clean removes build products only.
 clean:
-	rm -rf build *.o *.gch
+	rm -rf build/*.o build/*_test build/host_test build/*.elf build/*.map build/undef-*.txt build/fm1-*.o *.o *.gch

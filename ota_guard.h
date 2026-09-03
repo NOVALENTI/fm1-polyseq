@@ -20,11 +20,18 @@
  * truncated upgrade intent is honored — a spurious reboot-to-OTA is
  * always safer than a missed one.
  *
- * INTEGRATION (board glue, not here):
- *   - Call OTA_Guard_FeedByte() for every byte arriving on USB MIDI
- *     (safe from ISR or task context; single-writer assumed per context).
- *   - Poll OTA_Guard_UpgradeRequested() in the main loop; on nonzero,
- *     quiesce audio/sequencer and jump to the bootloader OTA entry.
+ * INTEGRATION (board glue, verified against fw-AC79_AIoT_SDK):
+ *   - USB device stack (include_lib/driver/device/usb/): select the
+ *     composite class with usb_device_mode() (usb_stack.h); USB MIDI is
+ *     the Audio-class MIDI-streaming subclass (USB_SUBCLASS_MIDISTREAMING
+ *     plus MS IN/OUT JACK descriptors, device/uac_audio.h).
+ *   - Register the MIDI bulk-OUT endpoint ISR with usb_g_set_intr_hander()
+ *     (usb_stack.h). Inside it, unwrap each 4-byte USB-MIDI event packet
+ *     to raw MIDI bytes and call OTA_Guard_FeedByte() per byte — the feed
+ *     path is ISR-safe by design (single producer into the SPSC queue).
+ *   - Poll OTA_Guard_UpgradeRequested() (or OTA_Dispatch_Poll()) in the
+ *     main loop; on nonzero, quiesce audio/sequencer and jump to the
+ *     bootloader OTA entry.
  *
  * Design: byte-streaming state machine, static state only, no heap,
  * bounded payload skip (OTA_MAX_SKIP), auto-resync on F0. */
