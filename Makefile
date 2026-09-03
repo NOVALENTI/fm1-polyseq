@@ -6,8 +6,9 @@ CC_PI    ?= pi32v2-gcc
 JIELI_BIN ?= /opt/jieli/pi32v2/bin
 LD_PI     ?= $(JIELI_BIN)/ld
 NM_PI     ?= $(JIELI_BIN)/nm
-# Target libc/include tree (newlib math.h etc., same layout as the SDK).
-PI_INC    := -I$(JIELI_BIN)/../include
+# Target libc/include tree (newlib math.h etc., same layout as the SDK),
+# plus repo root (fm_voice.c includes fm_stub.h).
+PI_INC    := -I$(JIELI_BIN)/../include -I.
 CFLAGS   := -std=c99 -Wall -Wextra -Wsign-compare -Werror -Os -ffunction-sections -fdata-sections
 SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_midi.c ota_guard.c
 # FM engine port (Dexed/msfa -> C99). Not linked into firmware until the
@@ -25,14 +26,19 @@ FM_SRC   := fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c
 #   deliberately: clang lowers small constant-fill init loops to them
 #   (e.g. 6-byte voice tables). They are bounded, heap-free, lock-free,
 #   and ISR-safe. Anything ELSE undefined (float helpers, malloc, …) fails.
-ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|memset|memcpy)$$
+# ENGINE_LIBM = boot/note-on-time only (table inits, osc_freq detune):
+#   libm (sin cos floor pow exp2 exp log) + soft-double helpers. The
+#   render hot loops (osc/env/core) are integer-only; the sole render
+#   float ops are the output int->float scale (reciprocal mult).
+#   Resolved via newlib/compiler-rt at the SDK link.
+ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|memset|memcpy|__adddf3|__divdf3|__extendsfdf2|__fixdfsi|__fixunsdfsi|__floatsidf|__floatsisf|__floatunsidf|__muldf3|__mulsf3|__subdf3|exp|exp2|floor|log|sin|cos|pow)$$
 ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
 .PHONY: all host target fw image-dryrun check-no-malloc sweep-test sram clean
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/fm_voice_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
@@ -44,6 +50,7 @@ host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_
 	build/fm_core_test
 	build/fm_curve_test
 	build/fm_note_test
+	build/fm_voice_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -96,7 +103,11 @@ build/fm_curve_test: tests/fm_curve_test.c fm/fm_curve.c fm/fm_exp2.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_exp2.c -o build/fm_curvexp2_c.o
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_curve_test.c build/fm_curve_c.o build/fm_curvexp2_c.o -o $@ -lm
 
-# Bit-exact voice cross-check: original Dx7Note vs C99 FmNote.
+# Voice manager test: audibility, determinism, tails, split, bad args.
+# Depends on the note/curve test rules for the shared fm objects.
+build/fm_voice_test: tests/fm_voice_test.c fm/fm_voice.c build/fm_note_test build/fm_curve_test | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. -c fm/fm_voice.c -o build/fm_vvoice_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_voice_test.c build/fm_vvoice_c.o build/fm_vnote_c.o build/fm_vcore_c.o build/fm_vkernel_c.o build/fm_vsin_c.o build/fm_vexp2_c.o build/fm_vfreq_c.o build/fm_venv_c.o build/fm_vlfo_c.o build/fm_vpenv_c.o build/fm_vporta_c.o build/fm_vctrl_c.o build/fm_vcurve_c.o -o $@ -lm
 # Originals: dx7note/lfo/controllers/tuning-iface/porta + msfa DSP core,
 # with JUCE-free TestTuning and null-safe MTS stubs (see test header).
 # Tunings.h/TuningsImpl.h vendored from Surge tuning-library (MIT).
@@ -162,6 +173,7 @@ target: | build
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_op_kernel.c -o build/fm_op_kernel.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_curve.c -o build/fm_curve.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_note.c -o build/fm_note.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_voice.c -o build/fm_voice.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
@@ -173,7 +185,7 @@ sweep-test:
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing
 # helper, accidental libc call like memcpy, soft-float libcall) fails here,
 # long before the JieLi SDK link. Requires the toolchain (runs in Docker).
-FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o
+FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o build/fm_voice.o build/fm_note.o build/fm_core.o build/fm_op_kernel.o build/fm_sin.o build/fm_exp2.o build/fm_freqlut.o build/fm_env.o build/fm_lfo.o build/fm_pitchenv.o build/fm_porta.o build/fm_ctrl.o build/fm_curve.o
 FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o build/ota_dispatch.o
 
 fw: target
@@ -194,9 +206,9 @@ fw: target
 # Requires the toolchain (runs in Docker/CI); not a bootable image.
 image-dryrun: fw
 	$(CC_PI) $(CFLAGS) -fno-builtin-memset -fno-builtin-memcpy -c target/stubs.c -o build/stubs.o
-	$(LD_PI) -T target/fm1.ld build/fm1-polyseq.o build/stubs.o -o build/fm1-dryrun.elf -Map build/fm1-dryrun.map
-	$(NM_PI) build/fm1-dryrun.elf | grep -q '^0*2000[0-9a-f]* T main' || (echo "main not in rom"; exit 1)
-	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [TtRr] ' | grep -vq '^0*2000' || (echo "code/rodata outside rom"; exit 1)
+	$(LD_PI) -T target/fm1.ld build/fm1-polyseq.o build/stubs.o -o build/fm1-dryrun.elf -Map build/fm1-dryrun.map -L$(JIELI_BIN)/../lib --start-group -lc -lm -lcompiler-rt --end-group
+	$(NM_PI) build/fm1-dryrun.elf | grep -q '^0*200[0-9a-f]* T main' || (echo "main not in rom"; exit 1)
+	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [TtRr] ' | grep -vq '^0*200' || (echo "code/rodata outside rom"; exit 1)
 	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [BbDd] ' | grep -vq '^0*1c0' || (echo "data/bss outside ram"; exit 1)
 	@echo "IMAGE LAYOUT OK"
 	size build/fm1-dryrun.elf

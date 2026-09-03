@@ -1,10 +1,11 @@
 /* target/stubs.c — DRY-RUN ONLY symbols for `make image-dryrun`.
  *
- * Never linked into the real firmware: the Dexed engine port provides
- * FM_*, board glue provides Uart0_SendByte, and JieLi libc provides
- * memset/memcpy at SDK integration time. These definitions exist solely
- * so the draft link script can be exercised (section placement, address
- * ranges) without the SDK libs. The mem* here are bounded byte loops with
+ * Never linked into the real firmware: the FM_* engine is real code now
+ * (fm/fm_voice.c), board glue provides Uart0_SendByte, JieLi libc provides
+ * memset/memcpy, and newlib/compiler-rt provides the boot-time float
+ * helpers at SDK integration time. The definitions below exist solely so
+ * the draft link script can be exercised (section placement, address
+ * ranges) without the SDK libs. The mem* are bounded byte loops with
  * identical semantics to libc; compiled -fno-builtin so they cannot
  * self-recurse. */
 #include <stdint.h>
@@ -26,17 +27,6 @@ void *memcpy(void *dst, const void *src, unsigned long n)
         *d++ = *s++;
     }
     return dst;
-}
-
-void FM_Init(uint32_t sample_rate) { (void)sample_rate; }
-void FM_NoteOn(uint8_t voice_id, uint8_t midi_note, uint8_t velocity)
-{
-    (void)voice_id; (void)midi_note; (void)velocity;
-}
-void FM_NoteOff(uint8_t voice_id) { (void)voice_id; }
-void FM_Render(float *left_out, float *right_out, uint16_t num_frames)
-{
-    (void)left_out; (void)right_out; (void)num_frames;
 }
 
 void Uart0_SendByte(char c) { (void)c; }
