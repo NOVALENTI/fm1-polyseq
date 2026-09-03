@@ -13,12 +13,17 @@ static void put2dec(Debug_PutcFn f, uint8_t v)
     f((char)('0' + (v % 10u)));
 }
 
+static char hex_digit(uint8_t v)
+{
+    uint8_t d = (uint8_t)(v & 0x0Fu);
+    /* Both ?: operands are uint8_t: no sign-compare warning on GCC/Clang. */
+    return (char)(d + ((d < 10u) ? (uint8_t)'0' : (uint8_t)('A' - 10)));
+}
+
 static void put2hex(Debug_PutcFn f, uint8_t v)
 {
-    uint8_t hi = (uint8_t)((v >> 4) & 0x0Fu);
-    uint8_t lo = (uint8_t)(v & 0x0Fu);
-    f((char)(hi < 10u ? ('0' + hi) : ('A' + hi - 10u)));
-    f((char)(lo < 10u ? ('0' + lo) : ('A' + lo - 10u)));
+    f(hex_digit((uint8_t)(v >> 4)));
+    f(hex_digit(v));
 }
 
 static void shift_word_out(uint16_t w)

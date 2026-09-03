@@ -5,7 +5,7 @@ CC_PI    ?= pi32v2-gcc
 JIELI_BIN ?= /opt/jieli/pi32v2/bin
 LD_PI     ?= $(JIELI_BIN)/ld
 NM_PI     ?= $(JIELI_BIN)/nm
-CFLAGS   := -std=c99 -Wall -Wextra -Werror -Os -ffunction-sections -fdata-sections
+CFLAGS   := -std=c99 -Wall -Wextra -Wsign-compare -Werror -Os -ffunction-sections -fdata-sections
 SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_midi.c
 
 # Platform ABI: the ONLY undefined symbols our firmware may reference.
@@ -48,7 +48,7 @@ build:
 # Independent per-module cross-compiles: catches pi32v2 syntax errors early.
 # NOTE: link happens against the Dexed C++ engine port (extern "C" wrappers
 # matching fm_stub.h) — these -c compiles intentionally stop before link.
-target:
+target: | build
 	$(CC_PI) $(CFLAGS) -c hal_shift_register.c -o build/hal.o
 	$(CC_PI) $(CFLAGS) -c sequencer.c -o build/seq.o
 	$(CC_PI) $(CFLAGS) -c audio_core.c -o build/audio.o
