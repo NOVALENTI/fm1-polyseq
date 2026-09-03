@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Google Inc.
+ * Copyright 2012 Google Inc. (algorithm), FM-1 project (C99 port).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,14 @@
  * limitations under the License.
  */
 
-/* fm_freqlut.h — C99 port of Dexed/msfa Freqlut (freqlut.h/freqlut.cc).
- * Resolves a frequency signal (1.0 in Q24 = 1 octave) to a phase delta.
- * Table depends on sample rate: init at boot (libm), lookup is integer. */
+#include "fm_curve.h"
+#include "fm_exp2.h"
 
-#ifndef FM_FREQLUT_H
-#define FM_FREQLUT_H
-
-#include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void FmFreqlut_Init(double sample_rate);
-int32_t FmFreqlut_Lookup(int32_t logfreq);
-
-#ifdef __cplusplus
+uint32_t FmNote_AmpCurve(uint32_t sensamp)
+{
+    uint32_t e16 = (uint32_t)(((uint64_t)sensamp * 1654u >> 16)) + 1153139u;
+    uint32_t qint = e16 >> 16;
+    uint32_t frac24 = (e16 & 0xFFFFu) << 8;
+    uint32_t mant = (uint32_t)FmExp2_Lookup((int32_t)frac24);
+    return (uint32_t)(((uint64_t)mant << qint) >> 24);
 }
-#endif
-
-#endif /* FM_FREQLUT_H */

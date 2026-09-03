@@ -32,7 +32,7 @@ ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
@@ -41,6 +41,9 @@ host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_
 	build/fm_tables_test
 	build/fm_env_test
 	build/fm_kernel_test
+	build/fm_core_test
+	build/fm_curve_test
+	build/fm_note_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -75,6 +78,58 @@ build/fm_kernel_test: tests/fm_kernel_test.cc fm/fm_sin.c fm/fm_op_kernel.c | bu
 	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -c tests/refcheck/msfa_orig/fm_op_kernel.cc -o build/msfa_kernel_ref.o
 	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -Ifm -I. tests/fm_kernel_test.cc build/fm_sin_c.o build/fm_kernel_c.o build/msfa_sin_ref.o build/msfa_kernel_ref.o -o $@ -lm
 
+# Bit-exact core cross-check (threshold edges, fb carry, all algorithms).
+build/fm_core_test: tests/fm_core_test.cc fm/fm_core.c fm/fm_exp2.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_core.c -o build/fm_ccore_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_exp2.c -o build/fm_cexp2_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_sin.c -o build/fm_csin_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_op_kernel.c -o build/fm_ckernel_c.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST $(REF_INC) -c tests/refcheck/msfa_orig/exp2.cc -o build/msfa_cexp2_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST $(REF_INC) -c tests/refcheck/msfa_orig/sin.cc -o build/msfa_csin_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST $(REF_INC) -c tests/refcheck/msfa_orig/fm_op_kernel.cc -o build/msfa_ckernel_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST $(REF_INC) -c tests/refcheck/msfa_orig/fm_core.cc -o build/msfa_ccore_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST $(REF_INC) -Wno-unused-private-field -Ifm -I. tests/fm_core_test.cc build/fm_ccore_c.o build/fm_cexp2_c.o build/fm_csin_c.o build/fm_ckernel_c.o build/msfa_cexp2_ref.o build/msfa_csin_ref.o build/msfa_ckernel_ref.o build/msfa_ccore_ref.o -o $@ -lm
+
+# Tight unit test for the integer amp-mod-sens curve vs libm exp().
+build/fm_curve_test: tests/fm_curve_test.c fm/fm_curve.c fm/fm_exp2.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_curve.c -o build/fm_curve_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_exp2.c -o build/fm_curvexp2_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_curve_test.c build/fm_curve_c.o build/fm_curvexp2_c.o -o $@ -lm
+
+# Bit-exact voice cross-check: original Dx7Note vs C99 FmNote.
+# Originals: dx7note/lfo/controllers/tuning-iface/porta + msfa DSP core,
+# with JUCE-free TestTuning and null-safe MTS stubs (see test header).
+# Tunings.h/TuningsImpl.h vendored from Surge tuning-library (MIT).
+# Reference objects build WITHOUT -Werror (third-party code, newer-clang
+# warnings); our files and the test driver keep it.
+REF_INC := -Itests/refcheck
+REF_CXX := $(CXX_HOST) -std=c++11 -Wall -Wextra -Os -DUNIT_TEST_HOST $(REF_INC)
+build/fm_note_test: tests/fm_note_test.cc fm/fm_note.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_env.c -o build/fm_venv_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_lfo.c -o build/fm_vlfo_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_pitchenv.c -o build/fm_vpenv_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_porta.c -o build/fm_vporta_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_ctrl.c -o build/fm_vctrl_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_core.c -o build/fm_vcore_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_op_kernel.c -o build/fm_vkernel_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_sin.c -o build/fm_vsin_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_exp2.c -o build/fm_vexp2_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_freqlut.c -o build/fm_vfreq_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_note.c -o build/fm_vnote_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_curve.c -o build/fm_vcurve_c.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/env.cc -o build/msfa_venv_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/sin.cc -o build/msfa_vsin_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/exp2.cc -o build/msfa_vexp2_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/freqlut.cc -o build/msfa_vfreq_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/fm_op_kernel.cc -o build/msfa_vkernel_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/fm_core.cc -o build/msfa_vcore_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/lfo.cc -o build/msfa_vlfo_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/pitchenv.cc -o build/msfa_vpenv_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/porta.cpp -o build/msfa_vporta_ref.o
+	$(REF_CXX) -c tests/refcheck/msfa_orig/dx7note.cc -o build/msfa_vnote_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST $(REF_INC) -Wno-unused-private-field -c tests/refcheck/ref_fb_zero.cc -o build/ref_fb_zero.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Wno-unused-private-field -Os -DUNIT_TEST_HOST $(REF_INC) -Ifm -I. tests/fm_note_test.cc build/fm_v*.o build/msfa_v*.o build/ref_fb_zero.o -o $@ -lm
+
 # Probe-flash app variant (bring-up only): compile-checked, never run on host.
 build/app_probe.o: app_main.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -DBRINGUP_PROBE -I. -c app_main.c -o $@
@@ -99,6 +154,14 @@ target: | build
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_exp2.c -o build/fm_exp2.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_freqlut.c -o build/fm_freqlut.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_env.c -o build/fm_env.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_lfo.c -o build/fm_lfo.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_pitchenv.c -o build/fm_pitchenv.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_porta.c -o build/fm_porta.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_ctrl.c -o build/fm_ctrl.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_core.c -o build/fm_core.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_op_kernel.c -o build/fm_op_kernel.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_curve.c -o build/fm_curve.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_note.c -o build/fm_note.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .

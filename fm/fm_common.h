@@ -42,4 +42,9 @@ static inline int fm_mini(int a, int b)
     return a < b ? a : b;
 }
 
+static inline int fm_maxi(int a, int b)
+{
+    return a > b ? a : b;
+}
+
 #endif /* FM_COMMON_H */

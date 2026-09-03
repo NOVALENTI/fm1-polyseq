@@ -28,10 +28,18 @@
 #define FM_TANH_LG_N_SAMPLES 10
 #define FM_TANH_N_SAMPLES (1 << FM_TANH_LG_N_SAMPLES)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void FmExp2_Init(void);
 int32_t FmExp2_Lookup(int32_t x);
 
 void FmTanh_Init(void);
 int32_t FmTanh_Lookup(int32_t x);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* FM_EXP2_H */

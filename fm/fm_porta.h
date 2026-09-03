@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Google Inc.
+ * Copyright 2019 Jean Pierre Cimalando.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,27 @@
  * limitations under the License.
  */
 
-/* fm_sin.h — C99 port of Dexed/msfa Sin (sin.h/sin.cc).
- * Interpolated sine LUT, SIN_DELTA variant (8 KB table, static RAM).
- * FmSin_Init is boot-time only (libm); FmSin_Lookup is pure integer. */
+/* fm_porta.h — C99 port of Dexed/msfa Porta (porta.h/porta.cpp).
+ * Per-CC-index portamento step tables (pitch units per FM_N block).
+ * Boot-time fill (double); render path is a plain table read. */
 
-#ifndef FM_SIN_H
-#define FM_SIN_H
+#ifndef FM_PORTA_H
+#define FM_PORTA_H
 
 #include <stdint.h>
-
-#define FM_SIN_LG_N_SAMPLES 10
-#define FM_SIN_N_SAMPLES (1 << FM_SIN_LG_N_SAMPLES)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Fill the table. Call once at boot, before any lookup. */
-void FmSin_Init(void);
+void FmPorta_InitSr(double sample_rate);
 
-/* Interpolated sine lookup. Phase is full-circle over 2^24. */
-int32_t FmSin_Lookup(int32_t phase);
+/* 128 CC-indexed step tables (Q24 pitch units per block). */
+extern int32_t fm_porta_rates[128];
+extern int32_t fm_porta_rates_glissando[128];
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* FM_SIN_H */
+#endif /* FM_PORTA_H */
