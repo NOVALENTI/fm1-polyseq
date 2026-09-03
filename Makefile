@@ -34,7 +34,7 @@ FM_SRC   := fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c
 ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|memset|memcpy|__adddf3|__divdf3|__extendsfdf2|__fixdfsi|__fixunsdfsi|__floatsidf|__floatsisf|__floatunsidf|__muldf3|__mulsf3|__subdf3|exp|exp2|floor|log|sin|cos|pow)$$
 ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
-.PHONY: all host target fw image-dryrun check-no-malloc sweep-test sram clean
+.PHONY: all host target fw image-dryrun sdk-compat check-no-malloc sweep-test sram clean
 
 all: host
 
@@ -174,6 +174,15 @@ target: | build
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_curve.c -o build/fm_curve.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_note.c -o build/fm_note.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_voice.c -o build/fm_voice.o
+
+# SDK header coexistence proof (compile-only, needs the SDK tree).
+# JIELI_SDK points at the extracted fw-AC79_AIoT_SDK root.
+JIELI_SDK ?= build/sdk
+# NOTE: vendor headers need GNU extensions (redeclared stdint types) and
+# trip -Wignored-qualifiers, so this TU relaxes those two (our code keeps
+# strict C99 + full -Werror everywhere else).
+sdk-compat:
+	$(CC_PI) -std=gnu11 -Wall -Wextra -Werror -Wno-ignored-qualifiers -Os -ffunction-sections -fdata-sections $(PI_INC) -I. -Ifm -I$(JIELI_SDK)/include_lib -I$(JIELI_SDK)/include_lib/driver -I$(JIELI_SDK)/include_lib/driver/cpu/wl82 -I$(JIELI_SDK)/include_lib/driver/device -I$(JIELI_SDK)/include_lib/system -I$(JIELI_SDK)/include_lib/system/generic -c target/sdk_compat.c -o build/sdk_compat.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .

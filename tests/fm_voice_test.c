@@ -49,6 +49,11 @@ int main(void)
     for (i = 0u; i < SEC; i++) {
         assert(sbuf_l[i] == sbuf_r[i]);
     }
+    /* Non-64-multiple DMA block sizes (partial-period IRQs) stay bounded. */
+    FM_Render(sbuf_l, sbuf_r, 100);
+    assert(peak_of(sbuf_l, 100u) <= 1.0f);
+    FM_Render(sbuf_l, sbuf_r, 1);
+    assert(peak_of(sbuf_l, 1u) <= 1.0f);
 
     /* 3. Determinism: same note from fresh init renders identically. */
     FM_Init(SR);
