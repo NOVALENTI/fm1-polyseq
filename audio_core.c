@@ -38,9 +38,10 @@
 static uint8_t live_note[FM_SEQ_VOICES]; /* index 0..5 -> voice 6..11 */
 static uint8_t live_next = 0u;           /* round-robin cursor */
 
-/* Monotonic audio clock (us) + sub-us carry for exact 2666.666... pacing. */
+/* Monotonic audio clock (us) + fractional carry for exact 2666.666... pacing.
+ * 32-bit quotient/remainder form: no 64-bit divide anywhere in this file. */
 static uint32_t audio_now_us = 0u;
-static uint32_t audio_carry_q16 = 0u; /* fractional us in 16.16 fixed point */
+static uint32_t audio_carry = 0u; /* leftover 1e6ths... in units of (num*1e6 % rate) */
 
 /* Simple mono->stereo: unity. Soft-clip to [-1,1] via fast saturate. */
 static float fast_clip(float x)
@@ -62,7 +63,7 @@ void Audio_Init(void)
     }
     live_next = 0u;
     audio_now_us = 0u;
-    audio_carry_q16 = 0u;
+    audio_carry = 0u;
     FM_Init(SAMPLE_RATE);
 }
 
@@ -114,9 +115,10 @@ void Audio_Process_Callback(float *output_buffer, uint16_t num_samples)
      * block so gate/swing edges inside the block are honored, not quantized
      * to block starts. Order is preserved (FIFO is due-ordered per step). */
     {
-        /* Block end time: now + block duration, integer math. */
-        uint64_t adv = ((uint64_t)num_samples * 1000000u) / SAMPLE_RATE;
-        uint32_t block_end = (uint32_t)(audio_now_us + (uint32_t)adv);
+        /* Block end time: now + block duration. 32-bit only:
+         * num_samples <= 128, so num*1e6 (<= 1.28e8) cannot overflow. */
+        uint32_t adv = ((uint32_t)num_samples * 1000000u) / SAMPLE_RATE;
+        uint32_t block_end = audio_now_us + adv;
 
         for (n = 0u; n < MAX_EVENTS_PER_BLOCK; n++) {
             if (!SEQ_FIFO_PopDue(block_end, &ev)) {
@@ -132,7 +134,6 @@ void Audio_Process_Callback(float *output_buffer, uint16_t num_samples)
                 FM_NoteOff(ev.voice_id);
             }
         }
-        (void)adv; /* reserved for future per-frame due scheduling */
     }
 
     /* ---- Region B: FM render. Heavy 6-op math lives inside FM_Render. ----
@@ -161,11 +162,16 @@ void Audio_Process_Callback(float *output_buffer, uint16_t num_samples)
         }
     }
 
-    /* ---- Advance audio clock with fractional carry (exact long-term). ---- */
+    /* ---- Advance audio clock. Quotient/remainder form keeps long-term
+     * pacing exact (128 @48k = 2666 + 32000/48000 us) with 32-bit math. -- */
     {
-        uint64_t adv_q16 = ((uint64_t)num_samples << 16) * 1000000u / SAMPLE_RATE;
-        uint64_t tot = (uint64_t)audio_carry_q16 + adv_q16;
-        audio_now_us = (uint32_t)(audio_now_us + (uint32_t)(tot >> 16));
-        audio_carry_q16 = (uint32_t)(tot & 0xFFFFu);
+        uint32_t prod = (uint32_t)num_samples * 1000000u; /* <= 1.28e8 */
+        uint32_t base = prod / SAMPLE_RATE;
+        audio_carry += prod % SAMPLE_RATE;
+        if (audio_carry >= SAMPLE_RATE) {
+            audio_carry -= SAMPLE_RATE;
+            base++;
+        }
+        audio_now_us += base;
     }
 }

@@ -31,7 +31,7 @@ target:
 	$(CC_PI) $(CFLAGS) -c debug_midi.c -o build/debug.o
 
 check-no-malloc:
-	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' .
+	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
 
 sram:
 	nm --print-size --size-sort build/*.o 2>/dev/null | tail -20 || true

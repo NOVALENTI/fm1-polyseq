@@ -236,7 +236,11 @@ void Sequencer_Tick(uint32_t current_bpm)
             } else if (gate > 100u) {
                 gate = 100u;
             }
-            uint32_t gate_us = (uint32_t)(((uint64_t)seq_step_dur * gate) / 100u);
+            /* Gate duration. 32-bit only: step_dur <= 500000 (30 BPM),
+             * gate <= 100, so the product (<= 5e7) cannot overflow.
+             * (A 64-bit multiply here would drag in __udivdi3 soft-divide
+             * on pi32v2, which has no 64-bit divider.) */
+            uint32_t gate_us = (seq_step_dur * (uint32_t)gate) / 100u;
             if (gate_us < 1000u) {
                 gate_us = 1000u; /* minimum 1 ms so offs never collapse onto ons */
             }
