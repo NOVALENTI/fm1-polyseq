@@ -40,6 +40,7 @@ host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_
 	build/ota_dispatch_test
 	build/fm_tables_test
 	build/fm_env_test
+	build/fm_kernel_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -65,6 +66,14 @@ build/fm_env_test: tests/fm_env_test.cc fm/fm_env.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -c fm/fm_env.c -o build/fm_env_c.o
 	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -Ifm -I. -c tests/refcheck/msfa_orig/env.cc -o build/msfa_env_ref.o
 	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -Ifm -I. tests/fm_env_test.cc build/fm_env_c.o build/msfa_env_ref.o -o $@
+
+# Bit-exact operator-kernel cross-check (+ original sine table impl).
+build/fm_kernel_test: tests/fm_kernel_test.cc fm/fm_sin.c fm/fm_op_kernel.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_sin.c -o build/fm_sin_c.o
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -c fm/fm_op_kernel.c -o build/fm_kernel_c.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -c tests/refcheck/msfa_orig/sin.cc -o build/msfa_sin_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -c tests/refcheck/msfa_orig/fm_op_kernel.cc -o build/msfa_kernel_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -Ifm -I. tests/fm_kernel_test.cc build/fm_sin_c.o build/fm_kernel_c.o build/msfa_sin_ref.o build/msfa_kernel_ref.o -o $@ -lm
 
 # Probe-flash app variant (bring-up only): compile-checked, never run on host.
 build/app_probe.o: app_main.c | build
