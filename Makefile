@@ -1,4 +1,5 @@
 CC_HOST  ?= gcc
+CXX_HOST ?= c++
 CC_PI    ?= pi32v2-gcc
 # JieLi toolchain bin dir (ld/nm live next to cc). Override to match mount:
 #   make fw CC_PI=/opt/jieli/pi32v2/bin/cc JIELI_BIN=/opt/jieli/pi32v2/bin
@@ -31,13 +32,14 @@ ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
 	build/ota_test
 	build/ota_dispatch_test
 	build/fm_tables_test
+	build/fm_env_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -56,6 +58,13 @@ build/ota_dispatch_test: tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c se
 
 build/fm_tables_test: tests/fm_tables_test.c $(FM_SRC) | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_tables_test.c $(FM_SRC) -o $@ -lm
+
+# Bit-exact envelope cross-check: original msfa Env (C++) vs C99 port.
+# Reference sources are vendored in tests/refcheck/ (verbatim upstream).
+build/fm_env_test: tests/fm_env_test.cc fm/fm_env.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -c fm/fm_env.c -o build/fm_env_c.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -Ifm -I. -c tests/refcheck/msfa_orig/env.cc -o build/msfa_env_ref.o
+	$(CXX_HOST) -std=c++11 -Wall -Wextra -Werror -Os -DUNIT_TEST_HOST -Itests/refcheck -Ifm -I. tests/fm_env_test.cc build/fm_env_c.o build/msfa_env_ref.o -o $@
 
 # Probe-flash app variant (bring-up only): compile-checked, never run on host.
 build/app_probe.o: app_main.c | build
@@ -80,6 +89,7 @@ target: | build
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_sin.c -o build/fm_sin.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_exp2.c -o build/fm_exp2.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_freqlut.c -o build/fm_freqlut.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_env.c -o build/fm_env.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
