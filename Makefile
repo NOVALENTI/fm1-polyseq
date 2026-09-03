@@ -6,7 +6,7 @@ JIELI_BIN ?= /opt/jieli/pi32v2/bin
 LD_PI     ?= $(JIELI_BIN)/ld
 NM_PI     ?= $(JIELI_BIN)/nm
 CFLAGS   := -std=c99 -Wall -Wextra -Wsign-compare -Werror -Os -ffunction-sections -fdata-sections
-SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_midi.c
+SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_midi.c ota_guard.c
 
 # Platform ABI: the ONLY undefined symbols our firmware may reference.
 # Everything else (SDK boot, Timer/I2S registration, GPIOA MMIO) is either
@@ -24,10 +24,11 @@ ABI_PROBE  := ^(Uart0_SendByte)$$
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
+	build/ota_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -37,6 +38,9 @@ build/edge_test: $(SRC) tests/edge_test.c | build
 
 build/probe_test: tests/probe_test.c hal_shift_register.c bringup_probe.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/probe_test.c hal_shift_register.c bringup_probe.c -o $@
+
+build/ota_test: tests/ota_test.c ota_guard.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_test.c ota_guard.c -o $@
 
 # Probe-flash app variant (bring-up only): compile-checked, never run on host.
 build/app_probe.o: app_main.c | build
@@ -56,6 +60,7 @@ target: | build
 	$(CC_PI) $(CFLAGS) -DBRINGUP_PROBE -c app_main.c -o build/app_probe.o
 	$(CC_PI) $(CFLAGS) -c debug_midi.c -o build/debug.o
 	$(CC_PI) $(CFLAGS) -c bringup_probe.c -o build/probe.o
+	$(CC_PI) $(CFLAGS) -c ota_guard.c -o build/ota.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
@@ -67,8 +72,8 @@ sweep-test:
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing
 # helper, accidental libc call like memcpy, soft-float libcall) fails here,
 # long before the JieLi SDK link. Requires the toolchain (runs in Docker).
-FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o
-FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o
+FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o
+FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o
 
 fw: target
 	$(LD_PI) -r $(FW_NORMAL_OBJS) -o build/fm1-polyseq.o
