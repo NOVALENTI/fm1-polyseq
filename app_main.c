@@ -14,6 +14,17 @@
  *
  * ISR partitioning: no float/printf in the timer ISR; all heap-free.
  * Replace Timer/I2S registration stubs with the JieLi SDK calls.
+ *
+ * FLASH SAFETY (verified: aroum/fm1-custom-fw research + community):
+ * The FM-1 PCB has NO JTAG/SWD/UART pads and NO recovery buttons; USB
+ * MIDI SysEx is the ONLY update channel (header F0 00 32 45, cmds
+ * 0x01 = verify/meta, 0x02 = start upgrade, 0x03 = data chunk 7-bit
+ * encoded, 0x04 = preset, 0x58 = ACK; stock tool: M-UPGRADE-FM1,
+ * container @JMUA/JLUFW). Consequence: DO NOT flash ANY build from this
+ * repo (probe included) until it carries a SysEx 0x01/0x02 listener that
+ * can re-enter bootloader/OTA mode — otherwise the device is permanently
+ * soft-locked against future updates and stock rollback. The probe and
+ * sequencer firmwares below do NOT yet contain that handler.
  */
 #include <stdint.h>
 #include "bsp_config.h"
