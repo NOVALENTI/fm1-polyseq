@@ -29,6 +29,10 @@ jobs:
         run: |
           TC=$(echo /tmp/jieli/jieli-linux-toolchains-*/pi32v2/bin)
           make fw CC_PI="$TC/cc" JIELI_BIN="$TC"
+      - name: Image-layout dry run (link script placement gates)
+        run: |
+          TC=$(echo /tmp/jieli/jieli-linux-toolchains-*/pi32v2/bin)
+          make image-dryrun CC_PI="$TC/cc" JIELI_BIN="$TC"
 
   docker:
     runs-on: ubuntu-latest
