@@ -23,4 +23,13 @@
 void Probe_ShiftOne(uint8_t bit, Debug_PutcFn putc_fn);
 void Probe_LEDOne(uint8_t led, Debug_PutcFn putc_fn);
 
+/* Non-blocking full sweep, paced by the caller (~50-100 ms per call).
+ * Each call emits exactly one line: sub-steps 0..15 run Probe_ShiftOne,
+ * sub-steps 16..31 run Probe_LEDOne, then the position wraps. Static
+ * position state, no heap. */
+void Probe_SweepStep(Debug_PutcFn putc_fn);
+
+/* Convenience: 32 paced sub-steps back-to-back (for scripted UART dumps). */
+void Probe_SweepOnce(Debug_PutcFn putc_fn);
+
 #endif /* BRINGUP_PROBE_H */

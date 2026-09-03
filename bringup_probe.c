@@ -68,3 +68,27 @@ void Probe_LEDOne(uint8_t led, Debug_PutcFn putc_fn)
     put2dec(putc_fn, led);
     putc_fn('\n');
 }
+
+#define PROBE_SWEEP_STEPS 32u
+
+void Probe_SweepStep(Debug_PutcFn putc_fn)
+{
+    static uint8_t pos = 0u;
+    if (putc_fn == 0) {
+        return;
+    }
+    if (pos < 16u) {
+        Probe_ShiftOne(pos, putc_fn);
+    } else {
+        Probe_LEDOne((uint8_t)(pos - 16u), putc_fn);
+    }
+    pos = (uint8_t)((pos + 1u) % PROBE_SWEEP_STEPS);
+}
+
+void Probe_SweepOnce(Debug_PutcFn putc_fn)
+{
+    uint8_t i;
+    for (i = 0u; i < PROBE_SWEEP_STEPS; i++) {
+        Probe_SweepStep(putc_fn);
+    }
+}

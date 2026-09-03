@@ -7,7 +7,7 @@ SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test
+host: build/host_test build/edge_test build/probe_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
@@ -21,6 +21,10 @@ build/edge_test: $(SRC) tests/edge_test.c | build
 build/probe_test: tests/probe_test.c hal_shift_register.c bringup_probe.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/probe_test.c hal_shift_register.c bringup_probe.c -o $@
 
+# Probe-flash app variant (bring-up only): compile-checked, never run on host.
+build/app_probe.o: app_main.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -DBRINGUP_PROBE -I. -c app_main.c -o $@
+
 build:
 	mkdir -p build
 
@@ -32,6 +36,7 @@ target:
 	$(CC_PI) $(CFLAGS) -c sequencer.c -o build/seq.o
 	$(CC_PI) $(CFLAGS) -c audio_core.c -o build/audio.o
 	$(CC_PI) $(CFLAGS) -c app_main.c -o build/app.o
+	$(CC_PI) $(CFLAGS) -DBRINGUP_PROBE -c app_main.c -o build/app_probe.o
 	$(CC_PI) $(CFLAGS) -c debug_midi.c -o build/debug.o
 	$(CC_PI) $(CFLAGS) -c bringup_probe.c -o build/probe.o
 
