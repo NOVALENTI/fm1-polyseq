@@ -27,6 +27,11 @@
 #include <stdio.h>
 static void probe_putc(char c) { putchar(c); }
 #else
+/* Uart0_SendByte: polled TX recipe from the SDK (cpu/wl82/debug.c
+ * uart_putchar), JL_UART0_BASE = 0x12000 (lsfr 0x10000 + map_adr(0x20,0)):
+ *   JL_UART0->CON0 |= BIT(13); JL_UART0->BUF = c; csync;
+ *   while (!(JL_UART0->CON0 & BIT(15))) {}
+ * Implement in board glue once the probed UART port/baud is known. */
 extern void Uart0_SendByte(char c); /* user-provided JieLi UART0 TX byte sink */
 static void probe_putc(char c) { Uart0_SendByte(c); }
 #endif
@@ -74,7 +79,11 @@ int main(void)
     Sequencer_Play();
 
     /* TODO(target): register Timer2_1kHz_ISR at SCAN_TICK_HZ and start I2S
-     * DMA at SAMPLE_RATE/BLOCK_FRAMES here. */
+     * DMA at SAMPLE_RATE/BLOCK_FRAMES here. SDK hooks (all verified in
+     * fw-AC79_AIoT_SDK): JL_TIMER2 at 0x10600 (CON/CNT/PRD/PWM) for the
+     * 1 kHz tick, or sys_timer_add(priv, func, msec) from system/timer.h
+     * for ms-granularity callbacks. XIP NOR flash rom ORIGIN is 0x2000120
+     * with internal ram0 at 0x1c00000 (cpu/wl82/sdk_ld_sfc.c, NO_SDRAM). */
 
     for (;;) {
         HAL_SR_GetKeys(cur_keys);

@@ -4,9 +4,17 @@
 #include <stdint.h>
 
 /* --------------------------------------------------------------------------
- * HYPOTHETICAL MEMORY-MAPPED GPIO REGISTERS (JieLi AC7911B8)
- * Replace with exact pi32v2 MMIO addresses when reverse-engineered.
- * All pin mapping changes belong HERE ONLY.
+ * GPIO PORT A REGISTERS (JieLi AC79 / WL82 family)
+ * VERIFIED against the official fw-AC79_AIoT_SDK, file
+ *   include_lib/driver/cpu/wl82/asm/WL82.h:
+ *     psfr_base = 0x50000, map_adr(grp,adr) = (64*grp + adr) * 4
+ *     JL_PORTA_BASE = psfr_base + map_adr(0x00, 0x00) = 0x50000
+ *     JL_PORT_FLASH_TypeDef layout: OUT +0x00, IN +0x04, DIR +0x08,
+ *       DIE +0x0C, PU +0x10, PD +0x14, ...
+ * DIR polarity VERIFIED in asm/gpio.h (IO_DEBUG_x macros clear DIR bits
+ * for output): 1 = Input, 0 = Output. Pin masks below (which PA pin does
+ * what on the FM-1 PCB) remain the reverse-engineering unknown — the
+ * BRINGUP_PROBE sweep exists to resolve them.
  * -------------------------------------------------------------------------- */
 #ifdef UNIT_TEST_HOST
 /* Host-simulated registers for logic testing (NOT on target). */
@@ -17,10 +25,9 @@ extern volatile uint32_t HOST_GPIOA_IN;
 #define GPIOA_OUT  (HOST_GPIOA_OUT)
 #define GPIOA_IN   (HOST_GPIOA_IN)
 #else
-#define GPIOA_BASE   0x40001000u
-#define GPIOA_DIR    (*(volatile uint32_t *)(GPIOA_BASE + 0x00u)) /* 1=In,0=Out */
-#define GPIOA_OUT    (*(volatile uint32_t *)(GPIOA_BASE + 0x04u))
-#define GPIOA_IN     (*(volatile uint32_t *)(GPIOA_BASE + 0x08u))
+#define GPIOA_OUT    (*(volatile uint32_t *)0x50000u) /* JL_PORTA->OUT */
+#define GPIOA_IN     (*(volatile uint32_t *)0x50004u) /* JL_PORTA->IN  */
+#define GPIOA_DIR    (*(volatile uint32_t *)0x50008u) /* JL_PORTA->DIR, 1=In,0=Out */
 #endif
 
 /* --------------------------------------------------------------------------
