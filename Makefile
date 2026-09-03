@@ -20,7 +20,7 @@ SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_
 ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|memset|memcpy)$$
 ABI_PROBE  := ^(Uart0_SendByte)$$
 
-.PHONY: all host target fw check-no-malloc sram clean
+.PHONY: all host target fw image-dryrun check-no-malloc sram clean
 
 all: host
 
@@ -78,6 +78,19 @@ fw: target
 	! grep -vE '$(ABI_PROBE)' build/undef-probe.txt | grep -q .
 	@echo "ABI GATE OK"
 	size build/fm1-polyseq.o build/fm1-probe.o
+
+# Image-layout dry run: link the normal firmware against DRY-RUN ONLY
+# stubs (target/stubs.c) with the draft script (target/fm1.ld) and prove
+# placement — code in XIP rom (0x2000...), data/bss in ram (0x1c0...).
+# Requires the toolchain (runs in Docker/CI); not a bootable image.
+image-dryrun: fw
+	$(CC_PI) $(CFLAGS) -fno-builtin-memset -fno-builtin-memcpy -c target/stubs.c -o build/stubs.o
+	$(LD_PI) -T target/fm1.ld build/fm1-polyseq.o build/stubs.o -o build/fm1-dryrun.elf -Map build/fm1-dryrun.map
+	$(NM_PI) build/fm1-dryrun.elf | grep -q '^0*2000[0-9a-f]* T main' || (echo "main not in rom"; exit 1)
+	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [TtRr] ' | grep -vq '^0*2000' || (echo "code/rodata outside rom"; exit 1)
+	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [BbDd] ' | grep -vq '^0*1c0' || (echo "data/bss outside ram"; exit 1)
+	@echo "IMAGE LAYOUT OK"
+	size build/fm1-dryrun.elf
 
 sram:
 	nm --print-size --size-sort build/*.o 2>/dev/null | tail -20 || true
