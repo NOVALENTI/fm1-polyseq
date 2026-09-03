@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host tests (strict C99, 3 suites)
+        run: make host
+      - name: Zero-malloc gate
+        run: make check-no-malloc
+
+  target:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official JieLi Linux toolchain
+        run: |
+          mkdir -p /tmp/jieli
+          curl -sL --retry 3 -o /tmp/jieli/toolchain.tar.xz \
+            https://jl-update.oss-cn-shenzhen.aliyuncs.com/jieli-linux-toolchains-20250805.1.tar.xz
+          tar -xJf /tmp/jieli/toolchain.tar.xz -C /tmp/jieli
+          /tmp/jieli/jieli-linux-toolchains-*/pi32v2/bin/clang --version
+      - name: Firmware partial-link + ABI gate
+        run: |
+          TC=$(echo /tmp/jieli/jieli-linux-toolchains-*/pi32v2/bin)
+          make fw CC_PI="$TC/cc" JIELI_BIN="$TC"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build cross-compiler image
+        run: docker build -f docker/Dockerfile.pi32v2 -t fm1-pi32v2 docker/
