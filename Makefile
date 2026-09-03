@@ -20,7 +20,7 @@ SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_
 ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|memset|memcpy)$$
 ABI_PROBE  := ^(Uart0_SendByte)$$
 
-.PHONY: all host target fw image-dryrun check-no-malloc sram clean
+.PHONY: all host target fw image-dryrun check-no-malloc sweep-test sram clean
 
 all: host
 
@@ -59,6 +59,9 @@ target: | build
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
+
+sweep-test:
+	python3 tools/decode_sweep.py --selftest
 
 # Firmware partial-link: merges our objects into relocatable firmware images
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing

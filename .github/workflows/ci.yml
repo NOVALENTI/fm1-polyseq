@@ -13,6 +13,8 @@ jobs:
         run: make host
       - name: Zero-malloc gate
         run: make check-no-malloc
+      - name: Sweep-decoder selftest
+        run: make sweep-test
 
   target:
     runs-on: ubuntu-latest
