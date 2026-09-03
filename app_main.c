@@ -21,16 +21,20 @@
  * 0x01 = verify/meta, 0x02 = start upgrade, 0x03 = data chunk 7-bit
  * encoded, 0x04 = preset, 0x58 = ACK; stock tool: M-UPGRADE-FM1,
  * container @JMUA/JLUFW). Consequence: DO NOT flash ANY build from this
- * repo (probe included) until it carries a SysEx 0x01/0x02 listener that
- * can re-enter bootloader/OTA mode — otherwise the device is permanently
- * soft-locked against future updates and stock rollback. The probe and
- * sequencer firmwares below do NOT yet contain that handler.
+ * repo (probe included) until (a) received USB-MIDI bytes reach
+ * OTA_Guard_FeedByte and (b) OTA_JumpToBootloader is implemented for this
+ * board — otherwise the device is permanently soft-locked against future
+ * updates and stock rollback. Detection (ota_guard) and quiesce-and-jump
+ * dispatch (ota_dispatch, polled in both main loops below) already exist;
+ * the USB feed and the jump itself are the remaining board glue.
  */
 #include <stdint.h>
 #include "bsp_config.h"
 #include "hal_shift_register.h"
 #include "sequencer.h"
 #include "audio_core.h"
+#include "ota_guard.h"
+#include "ota_dispatch.h"
 
 #ifdef BRINGUP_PROBE
 #include "bringup_probe.h"
@@ -69,14 +73,33 @@ void I2S_DMA_IRQ(float *dma_buf, uint16_t frames)
 }
 #endif
 
+/* OTA hooks, one definition per firmware image (see ota_dispatch.h). */
+#ifdef BRINGUP_PROBE
+void OTA_QuenchAudio(void)
+{
+    /* Probe image runs no sound engine: nothing to silence. */
+}
+#else
+void OTA_QuenchAudio(void)
+{
+    Sequencer_Stop(); /* immediate AllNotesOff for sequencer voices */
+}
+#endif
+
 int main(void)
 {
     HAL_SR_Init();
 #ifdef BRINGUP_PROBE
     /* Probe build: no sequencer, no FM, no I2S. Pace one sweep sub-step
-     * per loop iteration; insert ~50-100 ms delay per step on target. */
+     * per loop iteration; insert ~50-100 ms delay per step on target.
+     * OTA dispatch polled every iteration: the probe image must ALSO
+     * retain bootloader re-entry (feed USB bytes via OTA_Guard_FeedByte
+     * from the USB ISR once the MIDI stack exists). */
+    OTA_Guard_Init();
+    OTA_Dispatch_Init();
     for (;;) {
         Probe_SweepStep(probe_putc);
+        OTA_Dispatch_Poll(); /* jumps to OTA on SysEx 0x01/0x02 */
         /* TODO(target): ~50-100 ms pace (timer tick or delay loop). */
     }
 #else
@@ -84,6 +107,8 @@ int main(void)
     uint8_t i;
     Sequencer_Init();
     Audio_Init();
+    OTA_Guard_Init();
+    OTA_Dispatch_Init();
     for (i = 0u; i < NUM_KEYS; i++) {
         prev_keys[i] = 0u;
     }
@@ -102,6 +127,7 @@ int main(void)
 
     for (;;) {
         HAL_SR_GetKeys(cur_keys);
+        OTA_Dispatch_Poll(); /* SysEx OTA re-entry (see FLASH SAFETY) */
         for (i = 0u; i < NUM_KEYS; i++) {
             if (cur_keys[i] && !prev_keys[i]) {
                 /* Key press -> chromatic live note, velocity 100. */

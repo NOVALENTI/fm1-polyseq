@@ -40,3 +40,8 @@ void FM_Render(float *left_out, float *right_out, uint16_t num_frames)
 }
 
 void Uart0_SendByte(char c) { (void)c; }
+
+/* Dry-run layout placeholder. The real board glue never returns
+ * (watchdog reset into UBOOT OTA or retained-magic + system reset);
+ * this no-op exists only so the draft link proves section placement. */
+void OTA_JumpToBootloader(void) { }

@@ -13,22 +13,25 @@ SRC      := hal_shift_register.c sequencer.c audio_core.c bringup_probe.c debug_
 # static-inline in bsp_config.h or provided by the JieLi link step.
 # FM_*  = Dexed C++ engine port (extern "C" wrappers, linked later).
 # Uart0_SendByte = probe-flash UART TX byte sink (probe image only).
+# OTA_JumpToBootloader = board glue: quiesced-state jump into UBOOT OTA
+#   (watchdog reset or retained-magic + system reset; must not return).
 # memset/memcpy = JieLi libc (always present at the SDK link). Allowed
 #   deliberately: clang lowers small constant-fill init loops to them
 #   (e.g. 6-byte voice tables). They are bounded, heap-free, lock-free,
 #   and ISR-safe. Anything ELSE undefined (float helpers, malloc, …) fails.
-ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|memset|memcpy)$$
-ABI_PROBE  := ^(Uart0_SendByte)$$
+ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|memset|memcpy)$$
+ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
 .PHONY: all host target fw image-dryrun check-no-malloc sweep-test sram clean
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
 	build/ota_test
+	build/ota_dispatch_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -41,6 +44,9 @@ build/probe_test: tests/probe_test.c hal_shift_register.c bringup_probe.c | buil
 
 build/ota_test: tests/ota_test.c ota_guard.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_test.c ota_guard.c -o $@
+
+build/ota_dispatch_test: tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c sequencer.c hal_shift_register.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c sequencer.c hal_shift_register.c -o $@
 
 # Probe-flash app variant (bring-up only): compile-checked, never run on host.
 build/app_probe.o: app_main.c | build
@@ -61,6 +67,7 @@ target: | build
 	$(CC_PI) $(CFLAGS) -c debug_midi.c -o build/debug.o
 	$(CC_PI) $(CFLAGS) -c bringup_probe.c -o build/probe.o
 	$(CC_PI) $(CFLAGS) -c ota_guard.c -o build/ota.o
+	$(CC_PI) $(CFLAGS) -c ota_dispatch.c -o build/ota_dispatch.o
 
 check-no-malloc:
 	! grep -rnE '\b(malloc|calloc|realloc|free)\s*\(' --include='*.c' --include='*.h' --exclude-dir=build .
@@ -72,8 +79,8 @@ sweep-test:
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing
 # helper, accidental libc call like memcpy, soft-float libcall) fails here,
 # long before the JieLi SDK link. Requires the toolchain (runs in Docker).
-FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o
-FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o
+FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o
+FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o build/ota_dispatch.o
 
 fw: target
 	$(LD_PI) -r $(FW_NORMAL_OBJS) -o build/fm1-polyseq.o
