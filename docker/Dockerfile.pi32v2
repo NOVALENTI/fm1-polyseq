@@ -1,0 +1,18 @@
+# Patched pi32v2-gcc toolchain for JieLi AC7911B8 (NOR-flash XIP target).
+# The compiler itself is proprietary/patched; this image provides the
+# environment and expects the toolchain tarball mounted at build time.
+# Usage:
+#   docker build -f docker/Dockerfile.pi32v2 -t fm1-pi32v2 docker/
+#   docker run --rm -v $(pwd):/work -w /work fm1-pi32v2 make target
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    make file binutils ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Drop the patched pi32v2-gcc tree here when available, e.g.:
+# COPY pi32v2-toolchain/ /opt/pi32v2/
+# ENV PATH="/opt/pi32v2/bin:${PATH}"
+
+WORKDIR /work
+CMD ["make", "target", "CC_PI=pi32v2-gcc"]
