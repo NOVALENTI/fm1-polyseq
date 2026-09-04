@@ -5,8 +5,8 @@
 
 void Audio_Init(void);
 
-/* I2S DMA callback: fill `output_buffer` (interleaved stereo LRLR...) with
- * num_samples FRAMES. Called from DMA half/full-complete context. */
+/* DAC DMA callback: fill `output_buffer` (interleaved stereo LRLR...) with
+ * num_samples FRAMES. Called from the DAC data-handler context. */
 void Audio_Process_Callback(float *output_buffer, uint16_t num_samples);
 
 /* Live-play path (main loop): uses voices 6..11, never touches 0..5. */

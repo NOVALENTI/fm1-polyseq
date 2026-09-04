@@ -3,17 +3,17 @@
  * Normal firmware (default):
  *   1 kHz Timer 2/3 ISR -> HAL_SR_TimerISR() + Sequencer_Tick(bpm)
  *   Main loop           -> poll HAL_SR_GetKeys(), edge-detect, live voices 6..11
- *   I2S DMA half/full   -> Audio_Process_Callback() into CS4344
+ *   DAC DMA callback    -> Audio_Process_Callback() (internal DAC path)
  *
  * Bring-up probe firmware (-DBRINGUP_PROBE):
  *   Flash this INSTEAD of the sequencer to map the front panel over UART
  *   before the pinout is known. The main loop paces Probe_SweepStep over
  *   the 32-sub-step sweep (16 shift patterns + 16 LEDs). Sequencer, FM
- *   engine, and I2S are never started. Provide Uart0_SendByte() for target
+ *   engine, and DAC are never started. Provide Uart0_SendByte() for target
  *   (host builds use putchar).
  *
  * ISR partitioning: no float/printf in the timer ISR; all heap-free.
- * Replace Timer/I2S registration stubs with the JieLi SDK calls.
+ * Replace Timer/DAC registration stubs with the JieLi SDK calls.
  *
  * FLASH SAFETY (verified: aroum/fm1-custom-fw research + community):
  * The FM-1 PCB has NO JTAG/SWD/UART pads and NO recovery buttons; USB
@@ -69,8 +69,8 @@ void Timer2_1kHz_ISR(void)
     Sequencer_Tick(g_bpm);
 }
 
-/* Call this from I2S DMA half/full-complete IRQ. */
-void I2S_DMA_IRQ(float *dma_buf, uint16_t frames)
+/* Call this from the DAC DMA data-handler (SDK dac_set_data_handler). */
+void DAC_DMA_IRQ(float *dma_buf, uint16_t frames)
 {
     Audio_Process_Callback(dma_buf, frames);
 }
@@ -93,7 +93,7 @@ int main(void)
 {
     HAL_SR_Init();
 #ifdef BRINGUP_PROBE
-    /* Probe build: no sequencer, no FM, no I2S. Pace one sweep sub-step
+    /* Probe build: no sequencer, no FM, no DAC. Pace one sweep sub-step
      * per loop iteration; insert ~50-100 ms delay per step on target.
      * OTA dispatch polled every iteration: the probe image must ALSO
      * retain bootloader re-entry (feed USB bytes via OTA_Guard_FeedByte
@@ -117,13 +117,13 @@ int main(void)
     }
     Sequencer_Play();
 
-    /* TODO(target): register Timer2_1kHz_ISR at SCAN_TICK_HZ and start I2S
-     * DMA at SAMPLE_RATE/BLOCK_FRAMES here. SDK hooks (all verified in
+    /* TODO(target): register Timer2_1kHz_ISR at SCAN_TICK_HZ and start the
+     * DAC data handler at SAMPLE_RATE/BLOCK_FRAMES here. SDK hooks (all verified in
      * fw-AC79_AIoT_SDK): JL_TIMER2 at 0x10600 (CON/CNT/PRD/PWM) for the
      * 1 kHz tick, or sys_timer_add(priv, func, msec) from system/timer.h
      * for ms-granularity callbacks. Audio out: dac_open() +
      * dac_set_sample_rate(48000) + dac_set_data_handler(buf fill) +
-     * dac_on() (asm/dac.h, sr_points = BLOCK_FRAMES); external CS4344 via
+     * dac_on() (asm/dac.h, sr_points = BLOCK_FRAMES); external DACs via
      * iis_open(&pd, idx) + iis_channel_on() (asm/iis.h). XIP NOR flash rom
      * ORIGIN is 0x2000120 with internal ram0 at 0x1c00000
      * (cpu/wl82/sdk_ld_sfc.c, NO_SDRAM). */

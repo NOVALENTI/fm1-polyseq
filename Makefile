@@ -243,7 +243,7 @@ image-dryrun: fw
 	$(LD_PI) -T target/fm1.ld build/fm1-polyseq.o build/stubs.o -o build/fm1-dryrun.elf -Map build/fm1-dryrun.map -L$(JIELI_BIN)/../lib --start-group -lc -lm -lcompiler-rt --end-group
 	$(NM_PI) build/fm1-dryrun.elf | grep -q '^0*200[0-9a-f]* T main' || (echo "main not in rom"; exit 1)
 	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [TtRr] ' | grep -vq '^0*200' || (echo "code/rodata outside rom"; exit 1)
-	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [BbDd] ' | grep -vq '^0*1c0' || (echo "data/bss outside ram"; exit 1)
+	! $(NM_PI) build/fm1-dryrun.elf | grep -E '^[0-9a-f]+ [BbDd] ' | grep -vq '^0*1c' || (echo "data/bss outside ram"; exit 1)
 	@echo "IMAGE LAYOUT OK"
 	size build/fm1-dryrun.elf
 

@@ -9,9 +9,18 @@
  *                            jl_sfc_cipher base 0x4000): directory +
  *                            app.bin at 0x4120 (0x8E59C measured) +
  *                            cfg_tool.bin + cfg; VM/settings at flash end.
- *   ram0      : 0x1c00000 + TLB_SIZE (SDK sdk_ld_sfc.c, NO_SDRAM config)
- * This draft reserves a conservative ram slice (low ram0 holds the TLB and
- * boot info; exact sizes live in the SDK app_config).
+ * RAM map VERIFIED (same source, with-custom-firmware link.ld):
+ *   stock .bss ends 0x01C211FC; boot hwinfo struct at 0x01C7FD50.
+ *   Free gap 0x01C30000 + 192K sits clear between them — this draft uses
+ *   a conservative 128K slice of it, so a future blob can coexist with
+ *   stock (trampoline-hook strategy) instead of replacing app.bin.
+ *   (Previous draft used 0x1c01000, which collides with stock .bss.)
+ *
+ * SAFER-FIRST-FLASH PATTERN (same source): append blob in app.bin's
+ * font/bitmap region (XIP-mapped), run from RAM gap, hook stock via
+ * 6-byte trampolines over verified function entries (e.g. usr_app_task
+ * entry for install, midi_msg_dispatch for MIDI parse). Stock updater
+ * and bootloader stay intact, preserving the OTA return path.
  *
  * NOT a bootable image by itself: real boot needs the SDK crt0/uboot,
  * initcall sections, LTO plugin flags (-pi32v2-csync-before-rti) and the
@@ -21,7 +30,7 @@
 MEMORY
 {
     rom (rx)  : ORIGIN = 0x02000000, LENGTH = 1M
-    ram (rwx) : ORIGIN = 0x1c01000, LENGTH = 128K
+    ram (rwx) : ORIGIN = 0x01C30000, LENGTH = 128K
 }
 
 ENTRY(main)

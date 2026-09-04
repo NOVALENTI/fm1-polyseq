@@ -2,6 +2,12 @@
  *
  * Bridge: sequencer FIFO -> Dexed 6-op FM engine -> audio DMA buffer.
  *
+ * DAC REALITY CHECK (AL-255/FM-1-RE architecture.md, verified against
+ * stock): the FM-1 uses the AC791N INTERNAL audio DAC (DAC driver + DMA
+ * ring + jlstream nodes), not an external CS4344. The bridge below stays
+ * DAC-agnostic on purpose (float stereo frames -> glue converts), so no
+ * code changes were needed — only this note.
+ *
  * SDK HOOKUP (verified in fw-AC79_AIoT_SDK, include_lib/driver/cpu/wl82):
  *  Internal DAC path (asm/dac.h): dac_open(&pd) -> dac_set_sample_rate()
  *    -> dac_set_data_handler(priv, handler) -> dac_on(). The handler has
@@ -9,7 +15,7 @@
  *    sr_points samples ("多少个采样点进一次中断"); Audio_Process_Callback
  *    below IS that handler body (adapt float stereo to the s16le buffer
  *    at the glue layer: len_bytes = frames * 2ch * 2B).
- *  External DAC path, e.g. CS4344 (asm/iis.h): iis_open(&pd, index) with
+ *  External DAC path, if ever needed (asm/iis.h): iis_open(&pd, index) with
  *    port_sel = IIS_PORTA/PORTC/PORTG, channel_out, data_width, mclk_output
  *    and f32e frame clocks, then iis_channel_on(). Same sr_points pacing.
  *  Either way BLOCK_FRAMES maps 1:1 to the SDK's sr_points field; keep it
