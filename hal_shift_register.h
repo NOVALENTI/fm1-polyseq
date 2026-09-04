@@ -17,4 +17,11 @@ void HAL_SR_SetLEDs(uint16_t mask);
 /* Copy debounced key states (0/1 per key, 27 entries) for app use. */
 void HAL_SR_GetKeys(uint8_t out[NUM_KEYS]);
 
+#ifdef UNIT_TEST_HOST
+/* Test hook: last 16-bit word latched to the 595 chain (row + LED bits).
+ * Lets host tests verify shift-out content without probing GPIO edges.
+ * Zero cost on target (compiled out). */
+uint16_t HAL_SR_LastLatched(void);
+#endif
+
 #endif /* HAL_SHIFT_REGISTER_H */

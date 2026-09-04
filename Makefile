@@ -38,7 +38,7 @@ ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/fm_voice_test build/fullchain_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/fm_voice_test build/fullchain_test build/hw_sim_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
@@ -52,6 +52,7 @@ host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_
 	build/fm_note_test
 	build/fm_voice_test
 	build/fullchain_test
+	build/hw_sim_test
 
 build/host_test: $(SRC) tests/host_test.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/host_test.c $(SRC) -o $@
@@ -109,8 +110,11 @@ build/fm_curve_test: tests/fm_curve_test.c fm/fm_curve.c fm/fm_exp2.c | build
 build/fm_voice_test: tests/fm_voice_test.c fm/fm_voice.c build/fm_note_test build/fm_curve_test | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. -c fm/fm_voice.c -o build/fm_vvoice_c.o
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_voice_test.c build/fm_vvoice_c.o build/fm_vnote_c.o build/fm_vcore_c.o build/fm_vkernel_c.o build/fm_vsin_c.o build/fm_vexp2_c.o build/fm_vfreq_c.o build/fm_venv_c.o build/fm_vlfo_c.o build/fm_vpenv_c.o build/fm_vporta_c.o build/fm_vctrl_c.o build/fm_vcurve_c.o -o $@ -lm
+# Hardware-in-the-loop sim: virtual matrix + bounce + LEDs + real synth.
+build/hw_sim_test: tests/hw_sim_test.c hal_shift_register.c sequencer.c audio_core.c fm/fm_voice.c fm/fm_note.c fm/fm_core.c fm/fm_op_kernel.c fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c fm/fm_env.c fm/fm_lfo.c fm/fm_pitchenv.c fm/fm_porta.c fm/fm_ctrl.c fm/fm_curve.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/hw_sim_test.c hal_shift_register.c sequencer.c audio_core.c fm/fm_voice.c fm/fm_note.c fm/fm_core.c fm/fm_op_kernel.c fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c fm/fm_env.c fm/fm_lfo.c fm/fm_pitchenv.c fm/fm_porta.c fm/fm_ctrl.c fm/fm_curve.c -o $@ -lm
 # Full-chain integration: sequencer -> FIFO -> DMA -> real FM engine.
-# (OTA modules excluded: own suites; the jump hook has no host impl.)
+# (OTA modules excluded from both sims: own suites; jump hook has no host impl.)
 build/fullchain_test: tests/fullchain_test.c hal_shift_register.c sequencer.c audio_core.c fm/fm_voice.c fm/fm_note.c fm/fm_core.c fm/fm_op_kernel.c fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c fm/fm_env.c fm/fm_lfo.c fm/fm_pitchenv.c fm/fm_porta.c fm/fm_ctrl.c fm/fm_curve.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fullchain_test.c hal_shift_register.c sequencer.c audio_core.c fm/fm_voice.c fm/fm_note.c fm/fm_core.c fm/fm_op_kernel.c fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c fm/fm_env.c fm/fm_lfo.c fm/fm_pitchenv.c fm/fm_porta.c fm/fm_ctrl.c fm/fm_curve.c -o $@ -lm
 

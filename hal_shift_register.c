@@ -26,6 +26,15 @@ static volatile uint8_t key_stable[MATRIX_SLOTS];
 static volatile uint8_t key_history[MATRIX_SLOTS]; /* low 3 bits = history */
 static volatile uint8_t matrix_phase = 0u;         /* 0..MATRIX_ROWS-1 */
 
+#ifdef UNIT_TEST_HOST
+static volatile uint16_t last_latched = 0u;
+
+uint16_t HAL_SR_LastLatched(void)
+{
+    return last_latched;
+}
+#endif
+
 /* ---------------------------------------------------------------------------
  * Init
  * ------------------------------------------------------------------------- */
@@ -86,6 +95,9 @@ void HAL_SR_TimerISR(void)
     /* 3. Latch to output pins (RCK pulse). */
     SR_LATCH_HI();
     SR_LATCH_LO();
+#ifdef UNIT_TEST_HOST
+    last_latched = shift_word;
+#endif
 
     /* 4. Sample columns for the row just driven. */
     uint32_t col_inputs =
