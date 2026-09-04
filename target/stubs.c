@@ -31,7 +31,8 @@ void *memcpy(void *dst, const void *src, unsigned long n)
 
 void Uart0_SendByte(char c) { (void)c; }
 
-/* Dry-run layout placeholder. The real board glue never returns
- * (watchdog reset into UBOOT OTA or retained-magic + system reset);
- * this no-op exists only so the draft link proves section placement. */
-void OTA_JumpToBootloader(void) { }
+/* SDK-provided platform symbols (real definitions come from the SDK
+ * link: UPDATA_BEG is linker-reserved retained RAM, system_reset
+ * reboots into UBOOT). Placeholders exist only for layout proof. */
+uint32_t UPDATA_BEG[32];
+void system_reset(void) { }

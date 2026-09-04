@@ -33,7 +33,7 @@ FM_SRC   := fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c
 #   float ops are the output int->float scale (reciprocal mult).
 #   Resolved via newlib/compiler-rt at the SDK link.
 ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|UPDATA_BEG|system_reset|memset|memcpy|__adddf3|__divdf3|__extendsfdf2|__fixdfsi|__fixunsdfsi|__floatsidf|__floatsisf|__floatunsidf|__muldf3|__mulsf3|__subdf3|exp|exp2|floor|log|sin|cos|pow)$$
-ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader|UPDATA_BEG|system_reset)$$
+ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader|UPDATA_BEG|system_reset|memset|memcpy)$$
 
 .PHONY: all host target fw image-dryrun sdk-compat check-no-malloc sweep-test sram clean
 
