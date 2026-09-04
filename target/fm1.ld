@@ -14,6 +14,15 @@
  *   Free gap 0x01C30000 + 192K sits clear between them — this draft uses
  *   a conservative 128K slice of it, so a future blob can coexist with
  *   stock (trampoline-hook strategy) instead of replacing app.bin.
+ * Package structure (same source, docs/io/11-ota-protocol.md):
+ *   .fwsc = 20x0x30 header blocks (47 data + 1 marker each, strip to get
+ *   the logical image) + raw rest; UFW header decrypts with HDRKEY
+ *   0xFFFF to 8 entries (flash.bin, info.log, USR, isd_config.ini,
+ *   ota.bin, script.ver, blimit.bin, tail.bin). ota.bin is the nested
+ *   bootable that executes updates (loadaddr 0x1C0A800). cfg gate:
+ *   verifier refuses identical cfg — one padding byte flip in
+ *   eq_cfg_hw.bin's name field passes it (verified on hardware).
+ *   Custom-image packaging = replicate this container (open work).
  *   (Previous draft used 0x1c01000, which collides with stock .bss.)
  *
  * SAFER-FIRST-FLASH PATTERN (same source): append blob in app.bin's
