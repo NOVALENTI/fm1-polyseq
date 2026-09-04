@@ -11,11 +11,17 @@
  * request by jumping back to bootloader/OTA mode. Without this, a flashed
  * device is permanently soft-locked against updates and stock rollback.
  *
- * Protocol (verified: aroum/fm1-custom-fw): frames are
- *   F0 00 32 45 <cmd> <addr/payload...> <crc> F7
- * with cmd 0x01 = verify/meta, 0x02 = start upgrade, 0x03 = data chunk,
- * 0x04 = preset, 0x58 = ACK. Only 0x01/0x02 latch an upgrade request;
- * everything else is parsed and ignored (keeps the parser in sync).
+ * TWO host->device trigger families are recognized (different tooling
+ * generations; listening for both is strictly safer):
+ *  A. M-UPGRADE style: F0 00 32 45 <cmd> <...> F7 with cmd 0x01 =
+ *     verify/meta, 0x02 = start upgrade (aroum/fm1-custom-fw research;
+ *     other cmds 0x03 data / 0x04 preset / 0x58 ACK are parsed + ignored).
+ *  B. Direct OTA: F0 22 24 35 7F F7 UPGRADE_CMD, after which the device
+ *     re-enumerates as VID:PID 4d4a:4155 and PULLS the image via 0x30
+ *     read requests (AL-255/FM-1-RE fm1_ota.py; normal ID 4c4a:c755).
+ * Only family B's exact 0x7F command latches; other 22 24 35 commands
+ * (if any appear) are consumed silently.
+ *
  * Latch is optimistic (at the CMD byte, before frame end): even a
  * truncated upgrade intent is honored — a spurious reboot-to-OTA is
  * always safer than a missed one.

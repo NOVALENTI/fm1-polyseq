@@ -14,6 +14,10 @@ static const uint8_t kUpgrade[] =
     {0xF0, 0x00, 0x32, 0x45, 0x02, 0xF7};
 static const uint8_t kAck[] =
     {0xF0, 0x00, 0x32, 0x45, 0x58, 0x01, 0xF7};
+/* Direct OTA upgrade command (AL-255 fm1_ota.py UPGRADE_CMD). */
+static const uint8_t kUpgradeDirect[] = {0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7};
+/* Near-miss header (third byte wrong): must stay silent. */
+static const uint8_t kNearMiss[] = {0xF0, 0x22, 0x24, 0x36, 0x7F, 0xF7};
 
 int main(void)
 {
@@ -75,6 +79,20 @@ int main(void)
         OTA_Guard_Feed(kVerify, (uint16_t)sizeof(kVerify));
         assert(OTA_Guard_UpgradeRequested() == OTA_CMD_VERIFY);
     }
+
+    /* 7. Direct UPGRADE_CMD latches upgrade; near-miss stays silent;
+     * mixed-family bursts keep order. */
+    OTA_Guard_Init();
+    OTA_Guard_Feed(kNearMiss, (uint16_t)sizeof(kNearMiss));
+    assert(OTA_Guard_UpgradeRequested() == 0u);
+    OTA_Guard_Feed(kUpgradeDirect, (uint16_t)sizeof(kUpgradeDirect));
+    assert(OTA_Guard_UpgradeRequested() == OTA_CMD_UPGRADE);
+    assert(OTA_Guard_UpgradeRequested() == 0u);
+    OTA_Guard_Feed(kVerify, (uint16_t)sizeof(kVerify));
+    OTA_Guard_Feed(kUpgradeDirect, (uint16_t)sizeof(kUpgradeDirect));
+    assert(OTA_Guard_UpgradeRequested() == OTA_CMD_VERIFY);
+    assert(OTA_Guard_UpgradeRequested() == OTA_CMD_UPGRADE);
+    assert(OTA_Guard_UpgradeRequested() == 0u);
 
     printf("ALL OTA TESTS PASSED\n");
     return 0;

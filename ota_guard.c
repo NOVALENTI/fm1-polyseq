@@ -1,11 +1,13 @@
 /* ota_guard.c — see ota_guard.h.
  *
- * STATE MACHINE (one step per input byte):
- *   IDLE -> F0 -> H0(00) -> H1(32) -> H2(45) -> CMD -> SKIP* -> END(F7)
+ * STATE MACHINE (one step per input byte), two header families:
+ *   A: IDLE -> F0 -> H0(00) -> H1(32) -> H2(45) -> CMD -> SKIP* -> END(F7)
+ *   B: IDLE -> F0 -> H0(22) -> U1(24) -> U2(35) -> UCMD -> SKIP* -> END(F7)
  * - Any F0 restarts the frame (resync); any status byte >= 0x80 other than
  *   F7/F0 aborts to IDLE (running-status/realtime protection).
- * - CMD latches 0x01/0x02 into a 2-deep pending queue (verify then upgrade
- *   can arrive back-to-back); other commands are consumed silently.
+ * - CMD latches 0x01/0x02, UCMD latches 0x7F as UPGRADE, into a 4-deep
+ *   pending queue (verify then upgrade can arrive back-to-back); other
+ *   commands are consumed silently.
  * - SKIP consumes addr/payload/crc up to OTA_MAX_SKIP bytes, then F7 ends
  *   the frame. Overflow aborts to IDLE (frame ignored, parser survives).
  * - Queue: head/tail indices, volatile for ISR(feed)/main(poll) sharing;
@@ -15,7 +17,7 @@
 
 #define OTA_QDEPTH 4u /* usable capacity 3: verify+upgrade bursts survive */
 
-static uint8_t ota_state;              /* 0=IDLE 1=H0 2=H1 3=H2 4=CMD 5=SKIP */
+static uint8_t ota_state;              /* see ST_* below */
 static uint16_t ota_skip;              /* payload bytes consumed in SKIP */
 static volatile uint8_t ota_q[OTA_QDEPTH];
 static volatile uint8_t ota_head = 0u; /* producer (feed) index */
@@ -27,6 +29,9 @@ static volatile uint8_t ota_tail = 0u; /* consumer (poll) index */
 #define ST_H2   3u
 #define ST_CMD  4u
 #define ST_SKIP 5u
+#define ST_U1   6u
+#define ST_U2   7u
+#define ST_UCMD 8u
 
 static void ota_push(uint8_t cmd)
 {
@@ -58,13 +63,38 @@ void OTA_Guard_FeedByte(uint8_t b)
     }
     switch (ota_state) {
     case ST_H0:
-        ota_state = (b == 0x00u) ? ST_H1 : ST_IDLE;
+        if (b == 0x00u) {
+            ota_state = ST_H1;
+        } else if (b == 0x22u) {
+            ota_state = ST_U1;
+        } else {
+            ota_state = ST_IDLE;
+        }
         break;
     case ST_H1:
         ota_state = (b == 0x32u) ? ST_H2 : ST_IDLE;
         break;
     case ST_H2:
         ota_state = (b == 0x45u) ? ST_CMD : ST_IDLE;
+        break;
+    case ST_U1:
+        ota_state = (b == 0x24u) ? ST_U2 : ST_IDLE;
+        break;
+    case ST_U2:
+        ota_state = (b == 0x35u) ? ST_UCMD : ST_IDLE;
+        break;
+    case ST_UCMD:
+        if (b == 0xF7u) {
+            ota_state = ST_IDLE; /* empty frame */
+        } else if (b >= 0x80u) {
+            ota_state = ST_IDLE; /* stray status: abort */
+        } else {
+            if (b == 0x7Fu) {
+                ota_push(OTA_CMD_UPGRADE); /* direct OTA == upgrade */
+            }
+            ota_state = ST_SKIP;
+            ota_skip = 0u;
+        }
         break;
     case ST_CMD:
         if (b == 0xF7u) {
