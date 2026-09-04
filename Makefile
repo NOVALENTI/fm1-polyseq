@@ -214,6 +214,7 @@ check-no-malloc:
 
 sweep-test:
 	python3 tools/decode_sweep.py --selftest
+	python3 tools/fm1_flash.py selftest
 
 # Firmware partial-link: merges our objects into relocatable firmware images
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing
