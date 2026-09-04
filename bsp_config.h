@@ -32,6 +32,14 @@ extern volatile uint32_t HOST_GPIOA_IN;
 
 /* --------------------------------------------------------------------------
  * SHIFT REGISTER (74HC595D x2, cascaded 16-bit) PIN MASKS — Port A
+ *
+ * PHOTO-VERIFIED (panel PCB "DX7 MB V07"): U2 + U3 are stacked TSSOP-16
+ * packages in cascade position by the J12 FPC connector, flanked by
+ * matrix diodes (D23/D25/D26/D57) and LED series resistors
+ * (R15/R17/R27…). Control lines reach them via J12 from the mainboard,
+ * so the SoC-side pin assignment below is still the bring-up unknown:
+ * confirm DATA/CLK/LATCH/OE by continuity from J12 to the SoC side, or
+ * with the BRINGUP_PROBE sweep once flashable.
  * -------------------------------------------------------------------------- */
 #define SR_DATA_PIN  (1u << 0)  /* PA0 */
 #define SR_CLK_PIN   (1u << 1)  /* PA1 : SRCK  */
