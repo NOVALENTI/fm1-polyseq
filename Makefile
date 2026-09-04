@@ -20,8 +20,9 @@ FM_SRC   := fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c
 # static-inline in bsp_config.h or provided by the JieLi link step.
 # FM_*  = Dexed C++ engine port (extern "C" wrappers, linked later).
 # Uart0_SendByte = probe-flash UART TX byte sink (probe image only).
-# OTA_JumpToBootloader = board glue: quiesced-state jump into UBOOT OTA
-#   (watchdog reset or retained-magic + system reset; must not return).
+# OTA_JumpToBootloader = board glue (ota_jump.c): writes the UPDATA_PARM
+#   to UPDATA_FLAG_ADDR (&UPDATA_BEG + 8, linker-reserved) then
+#   system_reset(); both symbols come from the SDK link.
 # memset/memcpy = JieLi libc (always present at the SDK link). Allowed
 #   deliberately: clang lowers small constant-fill init loops to them
 #   (e.g. 6-byte voice tables). They are bounded, heap-free, lock-free,
@@ -31,19 +32,21 @@ FM_SRC   := fm/fm_sin.c fm/fm_exp2.c fm/fm_freqlut.c
 #   render hot loops (osc/env/core) are integer-only; the sole render
 #   float ops are the output int->float scale (reciprocal mult).
 #   Resolved via newlib/compiler-rt at the SDK link.
-ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|memset|memcpy|__adddf3|__divdf3|__extendsfdf2|__fixdfsi|__fixunsdfsi|__floatsidf|__floatsisf|__floatunsidf|__muldf3|__mulsf3|__subdf3|exp|exp2|floor|log|sin|cos|pow)$$
-ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader)$$
+ABI_NORMAL := ^(FM_Init|FM_NoteOn|FM_NoteOff|FM_Render|OTA_JumpToBootloader|UPDATA_BEG|system_reset|memset|memcpy|__adddf3|__divdf3|__extendsfdf2|__fixdfsi|__fixunsdfsi|__floatsidf|__floatsisf|__floatunsidf|__muldf3|__mulsf3|__subdf3|exp|exp2|floor|log|sin|cos|pow)$$
+ABI_PROBE  := ^(Uart0_SendByte|OTA_JumpToBootloader|UPDATA_BEG|system_reset)$$
 
 .PHONY: all host target fw image-dryrun sdk-compat check-no-malloc sweep-test sram clean
 
 all: host
 
-host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/fm_voice_test build/fullchain_test build/hw_sim_test build/fm_sysex_test build/app_probe.o
+host: build/host_test build/edge_test build/probe_test build/ota_test build/ota_dispatch_test build/ota_parm_test build/ota_jump_test build/fm_tables_test build/fm_env_test build/fm_kernel_test build/fm_core_test build/fm_curve_test build/fm_note_test build/fm_voice_test build/fullchain_test build/hw_sim_test build/fm_sysex_test build/app_probe.o
 	build/host_test
 	build/edge_test
 	build/probe_test
 	build/ota_test
 	build/ota_dispatch_test
+	build/ota_parm_test
+	build/ota_jump_test
 	build/fm_tables_test
 	build/fm_env_test
 	build/fm_kernel_test
@@ -69,6 +72,12 @@ build/ota_test: tests/ota_test.c ota_guard.c | build
 
 build/ota_dispatch_test: tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c sequencer.c hal_shift_register.c | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_dispatch_test.c ota_dispatch.c ota_guard.c sequencer.c hal_shift_register.c -o $@
+
+# OTA parm builder + jump tests (pure logic + mocked platform).
+build/ota_parm_test: tests/ota_parm_test.c ota_parm.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_parm_test.c ota_parm.c -o $@
+build/ota_jump_test: tests/ota_jump_test.c ota_jump.c ota_parm.c | build
+	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -I. tests/ota_jump_test.c ota_jump.c ota_parm.c -o $@
 
 build/fm_tables_test: tests/fm_tables_test.c $(FM_SRC) | build
 	$(CC_HOST) $(CFLAGS) -DUNIT_TEST_HOST -Ifm -I. tests/fm_tables_test.c $(FM_SRC) -o $@ -lm
@@ -174,6 +183,8 @@ target: | build
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c bringup_probe.c -o build/probe.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c ota_guard.c -o build/ota.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c ota_dispatch.c -o build/ota_dispatch.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c ota_parm.c -o build/ota_parm.o
+	$(CC_PI) $(CFLAGS) $(PI_INC) -c ota_jump.c -o build/ota_jump.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_sin.c -o build/fm_sin.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_exp2.c -o build/fm_exp2.o
 	$(CC_PI) $(CFLAGS) $(PI_INC) -c fm/fm_freqlut.c -o build/fm_freqlut.o
@@ -208,8 +219,8 @@ sweep-test:
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing
 # helper, accidental libc call like memcpy, soft-float libcall) fails here,
 # long before the JieLi SDK link. Requires the toolchain (runs in Docker).
-FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o build/fm_voice.o build/fm_note.o build/fm_core.o build/fm_op_kernel.o build/fm_sin.o build/fm_exp2.o build/fm_freqlut.o build/fm_env.o build/fm_lfo.o build/fm_pitchenv.o build/fm_porta.o build/fm_ctrl.o build/fm_curve.o build/fm_sysex.o
-FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o build/ota_dispatch.o
+FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o build/ota_parm.o build/ota_jump.o build/fm_voice.o build/fm_note.o build/fm_core.o build/fm_op_kernel.o build/fm_sin.o build/fm_exp2.o build/fm_freqlut.o build/fm_env.o build/fm_lfo.o build/fm_pitchenv.o build/fm_porta.o build/fm_ctrl.o build/fm_curve.o build/fm_sysex.o
+FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o build/ota_dispatch.o build/ota_parm.o build/ota_jump.o
 
 fw: target
 	$(LD_PI) -r $(FW_NORMAL_OBJS) -o build/fm1-polyseq.o

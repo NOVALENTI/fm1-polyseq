@@ -9,10 +9,6 @@
 #include "ota_dispatch.h"
 #include "ota_guard.h"
 
-/* App-provided quench (per-image behavior); board-provided jump. */
-extern void OTA_QuenchAudio(void);
-extern void OTA_JumpToBootloader(void);
-
 static uint8_t ota_ds_state = OTA_DS_IDLE;
 static uint8_t ota_ds_quench = 0u;
 

@@ -42,4 +42,9 @@ void OTA_Dispatch_Poll(void);
 /* Current dispatch state (OTA_DS_*). */
 uint8_t OTA_Dispatch_State(void);
 
+/* Hooks below provided per image / by board glue (implementations:
+ * OTA_QuenchAudio in app_main.c, OTA_JumpToBootloader in ota_jump.c). */
+void OTA_QuenchAudio(void);
+void OTA_JumpToBootloader(void);
+
 #endif /* OTA_DISPATCH_H */

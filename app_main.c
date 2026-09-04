@@ -22,11 +22,14 @@
  * encoded, 0x04 = preset, 0x58 = ACK; stock tool: M-UPGRADE-FM1,
  * container @JMUA/JLUFW). Consequence: DO NOT flash ANY build from this
  * repo (probe included) until (a) received USB-MIDI bytes reach
- * OTA_Guard_FeedByte and (b) OTA_JumpToBootloader is implemented for this
- * board — otherwise the device is permanently soft-locked against future
- * updates and stock rollback. Detection (ota_guard) and quiesce-and-jump
- * dispatch (ota_dispatch, polled in both main loops below) already exist;
- * the USB feed and the jump itself are the remaining board glue.
+ * OTA_Guard_FeedByte and (b) the OTA jump path is confirmed on hardware
+ * (ota_jump.c implements the official SDK handoff: UPDATA_PARM with CRC
+ * + magic to UPDATA_FLAG_ADDR, then system_reset; type USB_HID_UPDATA
+ * and ota_addr are the confirmable choices) — otherwise the device is
+ * permanently soft-locked against future updates and stock rollback.
+ * Detection (ota_guard) and quiesce-and-jump dispatch (ota_dispatch,
+ * polled in both main loops below) already exist; the USB feed and
+ * hardware confirmation are what remain.
  */
 #include <stdint.h>
 #include "bsp_config.h"
