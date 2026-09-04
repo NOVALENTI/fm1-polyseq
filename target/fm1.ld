@@ -22,7 +22,11 @@
  *   bootable that executes updates (loadaddr 0x1C0A800). cfg gate:
  *   verifier refuses identical cfg — one padding byte flip in
  *   eq_cfg_hw.bin's name field passes it (verified on hardware).
- *   Custom-image packaging = replicate this container (open work).
+ *   HARD BLOCKER: the subsequent ota.bin accept gate is UNSOLVED —
+ *   valid CRCs/names/versions/re-encodes are all refused by an
+ *   obfuscated product check (needs notify-code capture via hardware
+ *   access). Custom-image packaging is on hold until that falls; this
+ *   script stays a layout proof, not a flash pipeline.
  *   (Previous draft used 0x1c01000, which collides with stock .bss.)
  *
  * SAFER-FIRST-FLASH PATTERN (same source): append blob in app.bin's
