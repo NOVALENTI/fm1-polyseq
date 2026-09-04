@@ -208,7 +208,7 @@ sweep-test:
 # and gates on the ABI allowlist — any unexpected undefined symbol (missing
 # helper, accidental libc call like memcpy, soft-float libcall) fails here,
 # long before the JieLi SDK link. Requires the toolchain (runs in Docker).
-FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o build/fm_voice.o build/fm_note.o build/fm_core.o build/fm_op_kernel.o build/fm_sin.o build/fm_exp2.o build/fm_freqlut.o build/fm_env.o build/fm_lfo.o build/fm_pitchenv.o build/fm_porta.o build/fm_ctrl.o build/fm_curve.o
+FW_NORMAL_OBJS := build/hal.o build/seq.o build/audio.o build/app.o build/debug.o build/ota.o build/ota_dispatch.o build/fm_voice.o build/fm_note.o build/fm_core.o build/fm_op_kernel.o build/fm_sin.o build/fm_exp2.o build/fm_freqlut.o build/fm_env.o build/fm_lfo.o build/fm_pitchenv.o build/fm_porta.o build/fm_ctrl.o build/fm_curve.o build/fm_sysex.o
 FW_PROBE_OBJS  := build/hal.o build/probe.o build/app_probe.o build/ota.o build/ota_dispatch.o
 
 fw: target
