@@ -21,8 +21,11 @@
 
 #include "ota_parm.h"
 
-/* From the SDK link (update.h / system): */
-extern uint32_t UPDATA_BEG;
+/* From the SDK link (update.h / system): UPDATA_BEG names a reserved
+ * retained-RAM region (not a single word), so it is declared as an
+ * incomplete array: bounds-unknown, and single-object bounds warnings
+ * that newer GCC raises on scalar externs do not apply. */
+extern uint32_t UPDATA_BEG[];
 extern void system_reset(void);
 
 #ifndef OTA_UPDATE_TYPE
