@@ -40,6 +40,14 @@ extern volatile uint32_t HOST_GPIOA_IN;
  * so the SoC-side pin assignment below is still the bring-up unknown:
  * confirm DATA/CLK/LATCH/OE by continuity from J12 to the SoC side, or
  * with the BRINGUP_PROBE sweep once flashable.
+ * BACK BOARD (photos, no disassembly beyond panel): USB-C, 2x 3.5mm
+ * jacks, U12 8-pin (unresolved marking, SPI-flash candidate — a SOIC
+ * clip dump here would be a full-flash backup path), one unpopulated
+ * multi-pad footprint (debug/UART candidate, unprobed), scattered test
+ * vias. NO labeled UART pads on any visible side; SoC is on the hidden
+ * side. UART search + notify-code capture are blocked on: (a) hidden-side
+ * photos showing the SoC + any TX/RX/TP markings, (b) U12 marking readout,
+ * (c) meter continuity of the unpopulated footprint (GND/3V3/neighbors).
  * -------------------------------------------------------------------------- */
 #define SR_DATA_PIN  (1u << 0)  /* PA0 */
 #define SR_CLK_PIN   (1u << 1)  /* PA1 : SRCK  */
